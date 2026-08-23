@@ -1,4 +1,4 @@
-const { Events } = require("discord.js");
+const { Events, MessageFlags } = require("discord.js");
 const { updateTimetableMessage, TIMETABLE_REFRESH_ID } = require("../lib/timetable");
 
 module.exports = {
@@ -12,7 +12,10 @@ module.exports = {
         const ok = await updateTimetableMessage(interaction.client, interaction.message);
         if (!ok) {
           await interaction
-            .followUp({ content: "Could not refresh the timetable.", ephemeral: true })
+            .followUp({
+              content: "Could not refresh the timetable.",
+              flags: MessageFlags.Ephemeral,
+            })
             .catch(() => {});
         }
       } else if (interaction.customId.startsWith("session_join_")) {
@@ -38,13 +41,18 @@ module.exports = {
 
       const reply = {
         content: "❌ Something went wrong running that command.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       };
 
-      if (interaction.replied || interaction.deferred) {
-        await interaction.followUp(reply);
-      } else {
-        await interaction.reply(reply);
+      try {
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp(reply);
+        } else {
+          await interaction.reply(reply);
+        }
+      } catch (replyErr) {
+        // Interaction already expired (10062) - nothing to reply to.
+        console.warn(`[CMD] Could not reply for /${interaction.commandName}:`, replyErr);
       }
     }
   },

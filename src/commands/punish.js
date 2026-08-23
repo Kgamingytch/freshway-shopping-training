@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require("discord.js");
+const { SlashCommandBuilder, MessageFlags } = require("discord.js");
 const { notifyPunishmentIssued } = require("../lib/notifications");
 const { canManage } = require("../lib/guards");
 
@@ -12,8 +12,14 @@ module.exports = {
 
   async execute(interaction) {
     if (!canManage(interaction)) {
-      return interaction.reply({ content: "You need the Trainer, Staff, or Management role to use this.", ephemeral: true });
+      return interaction.reply({
+        content: "You need the Trainer, Staff, or Management role to use this.",
+        flags: MessageFlags.Ephemeral,
+      });
     }
+
+    // Defer first - DMs, Supabase lookups and the log embed can exceed 3s.
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const target = interaction.options.getUser("user", true);
     const type = interaction.options.getString("type", true);
@@ -27,9 +33,8 @@ module.exports = {
       issuedBy: interaction.user.username,
     });
 
-    await interaction.reply({
+    await interaction.editReply({
       content: `Punishment (${type}) issued to **${target.username}** - ${result.dmSent ? "DM sent" : "DM could not be sent (closed DMs or unknown user)"}.`,
-      ephemeral: true,
     });
   },
 };

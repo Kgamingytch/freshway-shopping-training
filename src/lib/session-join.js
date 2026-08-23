@@ -6,7 +6,7 @@
 // Discord id into a profile and registers the signup (Roblox name and staff
 // status are resolved there and returned).
 
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require("discord.js");
 const config = require("../config");
 
 const JOIN_CO_HOST_PREFIX = "session_join_co_host:";
@@ -85,7 +85,7 @@ async function handleSessionJoin(interaction) {
   const parsed = parseJoinCustomId(interaction.customId);
   if (!parsed) return false;
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const roleLabel = parsed.role === "co_host" ? "Co-Host" : "Helper";
   const result = await signupViaWebsite({

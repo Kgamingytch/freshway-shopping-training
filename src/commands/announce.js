@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require("discord.js");
+const { SlashCommandBuilder, MessageFlags } = require("discord.js");
 const { sendChannelEmbed } = require("../lib/channels");
 const { canManage } = require("../lib/guards");
 const config = require("../config");
@@ -25,8 +25,14 @@ module.exports = {
 
   async execute(interaction) {
     if (!canManage(interaction)) {
-      return interaction.reply({ content: "You need the Trainer, Staff, or Management role to use this.", ephemeral: true });
+      return interaction.reply({
+        content: "You need the Trainer, Staff, or Management role to use this.",
+        flags: MessageFlags.Ephemeral,
+      });
     }
+
+    // Defer first so a slow channel fetch never trips the 3s window.
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const title = interaction.options.getString("title", true);
     const description = interaction.options.getString("description", true);
@@ -41,11 +47,10 @@ module.exports = {
       mentionRoleId,
     });
 
-    await interaction.reply({
+    await interaction.editReply({
       content: ok
         ? `Announcement posted to **${channelKey}**.`
         : "Failed to post the announcement (check the channel is configured and the bot can see it).",
-      ephemeral: true,
     });
   },
 };
