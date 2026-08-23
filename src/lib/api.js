@@ -57,6 +57,7 @@ function startApi(client) {
 
   const server = http.createServer(async (req, res) => {
     if (req.headers["x-bot-secret"] !== secret) {
+      console.warn(`[API] Rejected request (bad or missing x-bot-secret): ${req.method} ${req.url}`);
       return sendJson(res, 401, { ok: false, error: "Unauthorized" });
     }
 
@@ -64,6 +65,9 @@ function startApi(client) {
     const path = url.pathname;
 
     try {
+      if (req.method === "POST") {
+        console.log(`[API] ${req.method} ${path}`);
+      }
       if (req.method === "GET" && path === "/health") {
         return sendJson(res, 200, { ok: true, bot: config.bot.name, version: config.bot.version });
       }
@@ -81,6 +85,7 @@ function startApi(client) {
 
       switch (path) {
         case "/api/notify/session-created":
+          console.log(`[API] session-created sessionId=${body.sessionId}`);
           await notifications.notifySessionCreated(client, body.sessionId);
           return sendJson(res, 200, { ok: true });
 

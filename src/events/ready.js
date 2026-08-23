@@ -12,10 +12,10 @@ module.exports = {
     console.log(`[READY] Serving ${client.guilds.cache.size} guild(s)`);
 
     // Validate channel + role configuration so missing IDs are obvious.
+    console.log("[CONFIG] Channel map:");
     for (const [key, getter] of Object.entries(config.channels)) {
-      if (!getter()) {
-        console.warn(`[CONFIG] Missing channel ID for "${key}" (FRESHWAY_CHANNEL_${key.toUpperCase()})`);
-      }
+      const id = getter();
+      console.log(`[CONFIG]   ${key} -> ${id || "(not set)"}`);
     }
     for (const [key, getter] of Object.entries(config.roles)) {
       if (!getter()) {
