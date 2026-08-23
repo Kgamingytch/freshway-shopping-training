@@ -1,4 +1,4 @@
-// Command guards — role checks for slash commands based on configured role
+// Command guards - role checks for slash commands based on configured role
 // IDs (FRESHWAY_ROLE_*) and the bot owner.
 
 const config = require("../config");

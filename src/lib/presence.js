@@ -1,4 +1,4 @@
-// Bot presence — sets a custom activity showing how many training sessions
+// Bot presence - sets a custom activity showing how many training sessions
 // are currently scheduled. Self-scheduled by the bot; also triggerable on
 // demand via the HTTP API (/api/presence/refresh).
 
@@ -12,9 +12,9 @@ const { getSupabase } = require("./supabase");
 async function refreshPresence(client) {
   const sb = getSupabase();
   if (!sb) {
-    console.warn("[Presence] SUPABASE not configured — using static activity");
-    setActivity(client, "FreshWay Training Portal");
-    return { ok: false, activity: "FreshWay Training Portal", error: "SUPABASE not configured" };
+    console.warn("[Presence] SUPABASE not configured - using static activity");
+    setActivity(client, "Training Portal");
+    return { ok: false, activity: "Training Portal", error: "SUPABASE not configured" };
   }
 
   try {
@@ -26,8 +26,8 @@ async function refreshPresence(client) {
     const scheduledCount = (sessions ?? []).length;
     const activityText =
       scheduledCount > 0
-        ? `FreshWay Training — ${scheduledCount} training session${scheduledCount === 1 ? "" : "s"} scheduled`
-        : "FreshWay Training — No training sessions scheduled";
+        ? `${scheduledCount} training session${scheduledCount === 1 ? "" : "s"} scheduled`
+        : "No training sessions scheduled";
 
     setActivity(client, activityText);
     console.log(`[Presence] Bot activity updated: ${activityText}`);
@@ -35,8 +35,8 @@ async function refreshPresence(client) {
   } catch (e) {
     const error = e instanceof Error ? e.message : "Unknown error";
     console.error("[Presence] Failed to update bot presence:", error);
-    setActivity(client, "FreshWay Training Portal");
-    return { ok: false, activity: "FreshWay Training Portal", error };
+    setActivity(client, "Training Portal");
+    return { ok: false, activity: "Training Portal", error };
   }
 }
 

@@ -1,4 +1,4 @@
-// Channel posting — sends FreshWay embeds to configured Discord channels.
+// Channel posting - sends FreshWay embeds to configured Discord channels.
 //
 // Channel IDs come from environment variables (see config.channels), so the
 // bot never creates channels: the guild owner creates them and the hosting
@@ -16,7 +16,7 @@ function channelIdFor(key) {
 /**
  * Send an embed to a channel by raw ID or config key.
  * Returns true on success, false on any failure (missing config, missing
- * channel, Discord error) — callers treat this as best-effort.
+ * channel, Discord error) - callers treat this as best-effort.
  */
 async function sendChannelEmbed(client, { channelId, channelKey, title, description, color, mentionRoleId }) {
   const id = channelId || (channelKey ? channelIdFor(channelKey) : null);

@@ -1,4 +1,4 @@
-// Training timetable — posts the upcoming training schedule to the
+// Training timetable - posts the upcoming training schedule to the
 // timetable channel as an embed with an action row of buttons.
 //
 // Usage:
@@ -21,7 +21,7 @@ function portalBase() {
 async function fetchUpcomingSessions(limit = 10) {
   const sb = getSupabase();
   if (!sb) {
-    console.warn("[Timetable] SUPABASE not configured — cannot fetch sessions");
+    console.warn("[Timetable] SUPABASE not configured - cannot fetch sessions");
     return [];
   }
 
@@ -68,7 +68,7 @@ function buildTimetableEmbed(sessions) {
     const time = s.scheduled_at
       ? `<t:${Math.floor(new Date(s.scheduled_at).getTime() / 1000)}:F>`
       : "Not scheduled";
-    lines.push(`> **${s.title}** — ${time}`);
+    lines.push(`> **${s.title}** - ${time}`);
     lines.push(`> Host: ${s.hostName}`);
     if (s.roblox_game_link) {
       lines.push(`> Game: [Join Server](${s.roblox_game_link})`);

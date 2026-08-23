@@ -20,8 +20,8 @@ module.exports = {
     await interaction.reply({
       content: result.ok
         ? result.count > 0
-          ? `Timetable posted — **${result.count}** session${result.count === 1 ? "" : "s"} scheduled.`
-          : "Timetable posted — **no sessions scheduled**."
+          ? `Timetable posted - **${result.count}** session${result.count === 1 ? "" : "s"} scheduled.`
+          : "Timetable posted - **no sessions scheduled**."
         : `Failed to post the timetable: ${result.error ?? "unknown error"}`,
       ephemeral: true,
     });

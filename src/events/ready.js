@@ -23,13 +23,13 @@ module.exports = {
       }
     }
     if (!process.env.GUILD_ID?.trim()) {
-      console.warn("[CONFIG] GUILD_ID not set — /api/role requests without an explicit guildId will fail");
+      console.warn("[CONFIG] GUILD_ID not set - /api/role requests without an explicit guildId will fail");
     }
     if (!config.api.secret()) {
-      console.warn("[CONFIG] BOT_API_SECRET not set — HTTP API disabled");
+      console.warn("[CONFIG] BOT_API_SECRET not set - HTTP API disabled");
     }
 
-    // Presence is best-effort — never let it block the API or schedulers.
+    // Presence is best-effort - never let it block the API or schedulers.
     try {
       await refreshPresence(client);
     } catch (e) {

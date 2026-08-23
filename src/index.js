@@ -31,7 +31,7 @@ if (fs.existsSync(commandsPath)) {
       client.commands.set(command.data.name, command);
       console.log(`[CMD] Loaded /${command.data.name}`);
     } else {
-      console.warn(`[CMD] Skipping ${file} — missing "data" or "execute"`);
+      console.warn(`[CMD] Skipping ${file} - missing "data" or "execute"`);
     }
   }
 }

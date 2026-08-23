@@ -1,4 +1,4 @@
-// HTTP API — the FreshWay website calls these endpoints to send Discord
+// HTTP API - the FreshWay website calls these endpoints to send Discord
 // messages. All Discord logic lives in this bot; the website only triggers.
 //
 // Every request must include the header `x-bot-secret` matching
@@ -51,7 +51,7 @@ function sendJson(res, status, obj) {
 function startApi(client) {
   const secret = config.api.secret();
   if (!secret) {
-    console.warn("[API] BOT_API_SECRET not set — HTTP API disabled");
+    console.warn("[API] BOT_API_SECRET not set - HTTP API disabled");
     return;
   }
 

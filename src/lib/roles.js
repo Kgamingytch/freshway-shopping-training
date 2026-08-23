@@ -1,4 +1,4 @@
-// Role management — add/remove Discord roles (e.g. Certified Trainer).
+// Role management - add/remove Discord roles (e.g. Certified Trainer).
 
 /**
  * Add a role to a guild member. Returns true on success.

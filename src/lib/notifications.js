@@ -1,4 +1,4 @@
-// Notification templates — ported from the FreshWay website
+// Notification templates - ported from the FreshWay website
 // (src/lib/training/discord-notifications.ts, punishments.ts, reports.ts,
 // sessions.ts, whitelist.ts, quiz.ts). Every Discord message the FreshWay
 // system can send lives here; the website only triggers these via the HTTP
@@ -48,7 +48,7 @@ async function notifySessionCreated(client, sessionId) {
   try {
     const sb = getSupabase();
     if (!sb) {
-      console.warn("[Notify] SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY not set — skipping session-created notification");
+      console.warn("[Notify] SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY not set - skipping session-created notification");
       return;
     }
     const { data: session } = await sb
@@ -235,7 +235,7 @@ async function notifyMonthlyReport(client, month, data = {}) {
 async function sendSessionReminders(client) {
   const sb = getSupabase();
   if (!sb) {
-    console.warn("[Reminders] SUPABASE not configured — skipping reminder sweep");
+    console.warn("[Reminders] SUPABASE not configured - skipping reminder sweep");
     return { sent: 0, errors: 0 };
   }
 

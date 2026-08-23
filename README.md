@@ -1,7 +1,7 @@
 # 🛒 FreshWay Shopping Training
 
 A Discord bot for FreshWay's shopping training system. This is the home of
-**all** FreshWay Discord functionality — embeds, channel posting, DMs, role
+**all** FreshWay Discord functionality - embeds, channel posting, DMs, role
 management, notifications, presence, and avatar lookups. The FreshWay website
 only triggers the bot through its HTTP API; it contains no Discord code.
 
@@ -56,8 +56,8 @@ request must send the `x-bot-secret` header matching `BOT_API_SECRET`.
 
 | Endpoint | Body | Purpose |
 |---|---|---|
-| `GET /health` | — | Liveness check |
-| `GET /api/user/{discordId}` | — | Current username/global name/avatar URL |
+| `GET /health` | - | Liveness check |
+| `GET /api/user/{discordId}` | - | Current username/global name/avatar URL |
 | `/api/notify/session-created` | `{ sessionId }` | Post new-session embed to trainings |
 | `/api/notify/session-status` | `{ sessionId, oldStatus, newStatus }` | Post status change |
 | `/api/notify/session-deleted` | `{ sessionId, title, deletedBy }` | Log deletion |
@@ -78,10 +78,10 @@ request must send the `x-bot-secret` header matching `BOT_API_SECRET`.
 
 ## Slash commands
 
-- `/ping` — latency check
-- `/announce <title> <description> [channel]` — post a FreshWay embed (Trainer/Staff/Management)
-- `/punish <user> <type> <reason>` — issue a punishment (Trainer/Staff/Management)
-- `/timetable` — post the training schedule to the timetable channel as an embed with a **Refresh** button (and a **View on Portal** link when `FRESHWAY_PORTAL_URL` is set). With no sessions it just says no sessions are scheduled.
+- `/ping` - latency check
+- `/announce <title> <description> [channel]` - post a FreshWay embed (Trainer/Staff/Management)
+- `/punish <user> <type> <reason>` - issue a punishment (Trainer/Staff/Management)
+- `/timetable` - post the training schedule to the timetable channel as an embed with a **Refresh** button (and a **View on Portal** link when `FRESHWAY_PORTAL_URL` is set). With no sessions it just says no sessions are scheduled.
 
 Slash commands are **synced automatically on every start** (guild-scoped when
 `GUILD_ID` is set), so there's no need to run `npm run deploy-commands` after
@@ -117,7 +117,7 @@ src/
 
 ## Troubleshooting
 
-- **Node.js 20** works — `ws` is bundled as the WebSocket transport for
+- **Node.js 20** works - `ws` is bundled as the WebSocket transport for
   supabase-js (which needs one on runtimes without a native WebSocket).
   supabase-js recommends Node 22+.
 

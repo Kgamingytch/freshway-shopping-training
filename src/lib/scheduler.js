@@ -1,4 +1,4 @@
-// Scheduled tasks — presence refresh and the session-reminder sweep run on
+// Scheduled tasks - presence refresh and the session-reminder sweep run on
 // intervals so the website doesn't need its own cron.
 
 const { refreshPresence } = require("./presence");

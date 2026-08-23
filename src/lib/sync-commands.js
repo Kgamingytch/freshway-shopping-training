@@ -1,4 +1,4 @@
-// Slash command sync — registers commands with Discord on EVERY startup so
+// Slash command sync - registers commands with Discord on EVERY startup so
 // the hosting panel never needs to run deploy-commands manually. Guild-
 // scoped when GUILD_ID is set (instant), global otherwise.
 
@@ -8,7 +8,7 @@ const path = require("node:path");
 
 /**
  * Push the commands from src/commands to Discord.
- * Never throws — failures are logged so the bot keeps running.
+ * Never throws - failures are logged so the bot keeps running.
  */
 async function syncCommands() {
   const commands = [];

@@ -31,7 +31,7 @@ module.exports = {
     events: "./src/events",
   },
 
-  // Channel IDs — resolved from environment at call time so the hosting
+  // Channel IDs - resolved from environment at call time so the hosting
   // panel can set them without a code change.
   channels: {
     trainings: () => process.env.FRESHWAY_CHANNEL_TRAININGS?.trim() || null,
@@ -48,7 +48,7 @@ module.exports = {
     management: () => process.env.FRESHWAY_ROLE_MANAGEMENT?.trim() || null,
   },
 
-  // HTTP API — used by the FreshWay website to send Discord messages
+  // HTTP API - used by the FreshWay website to send Discord messages
   api: {
     port: () => {
       const p = parseInt(process.env.BOT_API_PORT || "3001", 10);

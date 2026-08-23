@@ -32,7 +32,7 @@ function getSupabase() {
         ...(WebSocketImpl ? { realtime: { transport: WebSocketImpl } } : {}),
       });
     } catch (e) {
-      // A broken/unsupported Supabase config must never crash the bot —
+      // A broken/unsupported Supabase config must never crash the bot -
       // callers already degrade gracefully when getSupabase() is null.
       console.error("[Supabase] Failed to create client:", e);
       return null;

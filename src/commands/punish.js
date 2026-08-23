@@ -5,7 +5,7 @@ const { canManage } = require("../lib/guards");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("punish")
-    .setDescription("Issue a punishment — posts to punishment logs and DMs the target")
+    .setDescription("Issue a punishment - posts to punishment logs and DMs the target")
     .addUserOption((o) => o.setName("user").setDescription("Target user").setRequired(true))
     .addStringOption((o) => o.setName("type").setDescription("Warning, strike, mute, kick, ban").setRequired(true))
     .addStringOption((o) => o.setName("reason").setDescription("Reason for the punishment").setRequired(true)),
@@ -28,7 +28,7 @@ module.exports = {
     });
 
     await interaction.reply({
-      content: `Punishment (${type}) issued to **${target.username}** — ${result.dmSent ? "DM sent" : "DM could not be sent (closed DMs or unknown user)"}.`,
+      content: `Punishment (${type}) issued to **${target.username}** - ${result.dmSent ? "DM sent" : "DM could not be sent (closed DMs or unknown user)"}.`,
       ephemeral: true,
     });
   },

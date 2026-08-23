@@ -1,4 +1,4 @@
-// Direct messages — sends FreshWay-styled embeds to a user's DMs.
+// Direct messages - sends FreshWay-styled embeds to a user's DMs.
 //
 // discord.js handles rate limits and retries internally, so no manual
 // backoff logic is needed here.
@@ -13,7 +13,7 @@ async function sendDiscordDm(client, discordId, { title, description, color }) {
   try {
     const user = await client.users.fetch(String(discordId)).catch(() => null);
     if (!user) {
-      console.warn(`[DM] User ${discordId} not found — cannot send DM`);
+      console.warn(`[DM] User ${discordId} not found - cannot send DM`);
       return false;
     }
     await user.send({ embeds: [buildEmbed({ title, description, color })] });
