@@ -56,7 +56,7 @@ npm run dev
 | `FRESHWAY_ROLE_TM` | ❌ | Training Manager role ID (falls back to Management) |
 | `FRESHWAY_ROLE_TRAINING_LEADERSHIP` | ❌ | Training Leadership role ID (falls back to Management) |
 | `FRESHWAY_VOTE_THRESHOLD` | ❌ | Staff-case auto-resolve threshold (default `5`) |
-| `FRESHWAY_SITE_URL` | ❌ | Base URL of the FreshWay website. The bot calls it to register "Join as Co-Host" / "Join as Helper" button clicks (`POST /api/training/discord-signup`, shared `BOT_API_SECRET`). |
+| ~~`FRESHWAY_SITE_URL`~~ | - | **No longer required.** Join-button signups used to call the website's `/api/training/discord-signup`; the bot now registers them directly in Supabase. |
 
 ## HTTP API
 
