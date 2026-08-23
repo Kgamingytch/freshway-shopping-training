@@ -54,6 +54,13 @@ if (fs.existsSync(eventsPath)) {
   }
 }
 
+// --- Global DM proof listener (verification) ---
+const { handleProofDm } = require("./lib/verification");
+client.on("messageCreate", (message) => {
+  // Let the verification module try to handle DM proof images
+  handleProofDm(message).catch(() => {});
+});
+
 // --- Global error handling ---
 process.on("unhandledRejection", (err) => {
   console.error("[ERROR] Unhandled rejection:", err);

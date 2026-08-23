@@ -4,16 +4,11 @@
 //   1. A welcome embed with a "Verify & Authorization" button lives in the
 //      verification channel (auto-posted on startup if missing, or via
 //      /verify-setup).
-//   2. Clicking the button opens an application modal (name/roblox/discord,
-//      invited by, requested rank, proof link).
-//   3. On submit the user is told the request is reviewed within 12-24 hours
-//      and is DM'd; if they left proof blank they get 10 minutes to send a
-//      screenshot in DMs.
-//   4. The submission is posted to the review channel with the proof and
-//      Accept / Fail buttons; Training Leadership is pinged.
-//   5. Accept assigns the requested rank role and DMs the user. Fail DMs the
-//      user. Both remove the buttons so a duplicate cannot be submitted while
-//      one request is still pending.
+//   2. Clicking the button opens an application modal (name, invited by, rank).
+//   3. On submit the user is told to check DMs for proof collection.
+//   4. A global messageCreate listener picks up the proof image from DMs.
+//   5. The submission is posted to the review channel; Training Leadership is pinged.
+//   6. Accept assigns the requested rank role and DMs the user. Fail DMs the user.
 
 const {
   ActionRowBuilder,
@@ -23,6 +18,7 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
+  ChannelType,
 } = require("discord.js");
 const config = require("../config");
 const { buildEmbed, FW_GREEN } = require("./embeds");
@@ -39,6 +35,9 @@ const PROOF_DM_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 // In-memory pending submissions (also re-checked against the review channel
 // so a bot restart does not let someone submit twice).
 const pendingUsers = new Map();
+
+// Pending proof collection: userId -> { proof, timer, onCollected }
+const pendingProofs = new Map();
 
 /** The exact welcome copy from Training Leadership. */
 function welcomeDescription() {
@@ -146,7 +145,7 @@ async function hasPendingSubmission(client, userId) {
     if (!messages) return false;
     for (const m of messages.values()) {
       if (m.author?.id !== client.user.id) continue;
-      if (!m.components?.length) continue; // buttons removed = already decided
+      if (!m.components?.length) continue;
       const desc = m.embeds?.[0]?.description ?? "";
       if (desc.includes(`<@${userId}>`)) return true;
     }
@@ -157,64 +156,100 @@ async function hasPendingSubmission(client, userId) {
 }
 
 /**
- * Collect a proof image/link from the user's DMs (10 minute window).
- * Returns the attachment URL or null if nothing was sent.
+ * Handle a DM message from a user who is waiting to provide proof.
+ * Called from the global messageCreate listener in index.js.
+ * Returns true if the message was consumed (proof received).
  */
-async function collectProofInDm(client, userId) {
-  console.log(`[Verify] Sending DM proof request to ${userId}`);
-  const dm = await client.users.fetch(String(userId)).then((u) => u.createDM()).catch((e) => {
-    console.error(`[Verify] Could not open DM channel for ${userId}:`, e);
-    return null;
-  });
-  if (!dm) {
-    console.warn(`[Verify] DM channel unavailable for ${userId}`);
-    return null;
+async function handleProofDm(message) {
+  if (message.channel.type !== ChannelType.DM) return false;
+  if (message.author.bot) return false;
+
+  const userId = message.author.id;
+  const pending = pendingProofs.get(userId);
+  if (!pending) return false;
+
+  console.log(`[Verify] Received DM from ${userId}: attachments=${message.attachments?.size ?? 0}`);
+
+  let proof = null;
+
+  // Check for attachment first
+  if (message.attachments?.size) {
+    proof = message.attachments.first().url;
+    console.log(`[Verify] Proof attachment URL: ${proof}`);
+  } else {
+    // Fall back to a link in the message text
+    const link = message.content?.match(/https?:\/\/\S+/);
+    if (link) {
+      proof = link[0];
+      console.log(`[Verify] Proof link from text: ${proof}`);
+    }
   }
-  try {
-    await dm.send({
+
+  if (proof) {
+    // Clear the timeout and resolve
+    clearTimeout(pending.timer);
+    pending.proof = proof;
+    pending.resolve(proof);
+    pendingProofs.delete(userId);
+
+    // Confirm to user
+    await message.reply({
       embeds: [
         buildEmbed({
-          title: "Proof of Invitation",
-          description: [
-            "> Please **send a screenshot** of your invitation here.",
-            "> You have **10 minutes** to send it.",
-            "> If you do not send proof, your request will still be reviewed.",
-          ].join("\n"),
+          title: "Proof Received",
+          description: "> Your proof has been received. Your request will be reviewed within **12-24 hours**.",
         }),
       ],
-    });
-    console.log(`[Verify] DM proof request sent to ${userId}`);
-  } catch (e) {
-    console.error(`[Verify] Failed to send DM to ${userId}:`, e);
-    return null;
+    }).catch(() => {});
+  } else {
+    // No proof in this message — remind them
+    await message.reply({
+      content: "Please send an **image/screenshot** as proof of your invitation.",
+    }).catch(() => {});
   }
-  try {
-    const collected = await dm.awaitMessages({
-      filter: (m) => m.author.id === userId && !m.author.bot,
-      max: 1,
-      time: PROOF_DM_TIMEOUT_MS,
-      errors: ["time"],
-    });
-    const msg = collected.first();
-    console.log(`[Verify] Received DM from ${userId}: attachments=${msg?.attachments?.size ?? 0}`);
-    // Check for attachment first
-    if (msg?.attachments?.size) {
-      const url = msg.attachments.first().url;
-      console.log(`[Verify] Proof attachment URL: ${url}`);
-      return url;
+
+  return true;
+}
+
+/**
+ * Collect proof via DM using a Promise + timeout.
+ * Returns the proof URL or null if nothing was sent within 10 minutes.
+ */
+function collectProofInDm(client, userId) {
+  return new Promise(async (resolve) => {
+    // Send DM asking for proof
+    console.log(`[Verify] Sending DM proof request to ${userId}`);
+    try {
+      const user = await client.users.fetch(String(userId));
+      const dm = await user.createDM();
+      await dm.send({
+        embeds: [
+          buildEmbed({
+            title: "Proof of Invitation",
+            description: [
+              "> Please **send a screenshot** of your invitation here.",
+              "> You have **10 minutes** to send it.",
+              "> If you do not send proof, your request will still be reviewed.",
+            ].join("\n"),
+          }),
+        ],
+      });
+      console.log(`[Verify] DM proof request sent to ${userId}`);
+    } catch (e) {
+      console.error(`[Verify] Failed to send DM to ${userId}:`, e);
+      return resolve(null);
     }
-    // Fall back to a link in the message text
-    const link = msg?.content?.match(/https?:\/\/\S+/);
-    if (link) {
-      console.log(`[Verify] Proof link from text: ${link[0]}`);
-      return link[0];
-    }
-    console.log(`[Verify] No proof found in DM from ${userId}`);
-    return null;
-  } catch {
-    console.log(`[Verify] DM proof collection timed out for ${userId}`);
-    return null;
-  }
+
+    // Set up timeout
+    const timer = setTimeout(() => {
+      pendingProofs.delete(userId);
+      console.log(`[Verify] DM proof collection timed out for ${userId}`);
+      resolve(null);
+    }, PROOF_DM_TIMEOUT_MS);
+
+    // Store in pending map so global messageCreate can pick it up
+    pendingProofs.set(userId, { proof: null, timer, resolve });
+  });
 }
 
 async function handleVerificationModal(interaction) {
@@ -235,12 +270,12 @@ async function handleVerificationModal(interaction) {
   }
   pendingUsers.set(userId, true);
 
-  // Tell the user we received their form and ask for proof via DM.
+  // Tell the user to check DMs
   await interaction.editReply({
-    content: "Form received! **Please check your DMs** to send proof of invitation."
+    content: "Form received! **Please check your DMs** to send proof of invitation.",
   });
 
-  // Collect proof via DM (10 minute window).
+  // Collect proof via DM (non-blocking, uses global messageCreate listener)
   console.log(`[Verify] Collecting proof from ${userId} via DM...`);
   let proof = await collectProofInDm(interaction.client, userId);
   console.log(`[Verify] Proof result for ${userId}: ${proof || "none"}`);
@@ -250,14 +285,14 @@ async function handleVerificationModal(interaction) {
     console.warn("[Verify] No review channel configured (FRESHWAY_CHANNEL_VERIFICATION_REVIEWS)");
     return interaction.editReply({
       content: "Your form was received, but the review channel is not configured yet. Please contact Training Leadership.",
-    });
+    }).catch(() => {});
   }
   const channel = await interaction.client.channels.fetch(reviewChannelId).catch(() => null);
   if (!channel || !channel.isTextBased()) {
     console.warn(`[Verify] Review channel ${reviewChannelId} not found or not a text channel`);
     return interaction.editReply({
       content: "Your form was received, but the review channel is unavailable. Please contact Training Leadership.",
-    });
+    }).catch(() => {});
   }
 
   const description = [
@@ -278,7 +313,7 @@ async function handleVerificationModal(interaction) {
 
   await interaction.editReply({
     content: "All done! Your verification request has been submitted. Training Leadership will review it within **12-24 hours**.",
-  });
+  }).catch(() => {});
 }
 
 function buildDecisionRow(userId) {
@@ -296,7 +331,7 @@ function buildDecisionRow(userId) {
 
 /** Assign the requested rank role (Trainer or Directory) to a member. */
 async function assignRankRole(interaction, userId, requestedRank) {
-  const roleKey = requestedRank.includes("directory") ? "directory" : "trainer";
+  const roleKey = requestedRank.toLowerCase().includes("directory") ? "directory" : "trainer";
   const roleId = config.roles[roleKey]?.();
   if (!roleId || !interaction.guild) return false;
   try {
@@ -381,4 +416,6 @@ module.exports = {
   handleVerifyButton,
   handleVerificationModal,
   handleVerificationDecision,
+  handleProofDm,
+  pendingProofs,
 };
