@@ -1,7 +1,15 @@
 const { Events, MessageFlags } = require("discord.js");
 const { updateTimetableMessage, TIMETABLE_REFRESH_ID } = require("../lib/timetable");
 const { updateTrainingsBoard, TRAININGS_REFRESH_ID } = require("../lib/boards");
-const { handleSessionJoin } = require("../lib/session-join");
+const {
+  handleSessionJoin,
+  handleSessionManage,
+  handleSessionJoinAction,
+  MANAGE_PREFIX,
+  MANAGE_JOIN_CO_HOST_PREFIX,
+  MANAGE_JOIN_HELPER_PREFIX,
+  MANAGE_LEAVE_PREFIX,
+} = require("../lib/session-join");
 const {
   BOOKING_SELECT_ID,
   BOOKING_CANCEL_ID,
@@ -59,6 +67,14 @@ module.exports = {
             })
             .catch(() => {});
         }
+      } else if (
+        id.startsWith(MANAGE_JOIN_CO_HOST_PREFIX) ||
+        id.startsWith(MANAGE_JOIN_HELPER_PREFIX) ||
+        id.startsWith(MANAGE_LEAVE_PREFIX)
+      ) {
+        await handleSessionJoinAction(interaction);
+      } else if (id.startsWith(MANAGE_PREFIX)) {
+        await handleSessionManage(interaction);
       } else if (id.startsWith("session_join_")) {
         await handleSessionJoin(interaction);
       } else if (id === VERIFY_BUTTON_ID) {

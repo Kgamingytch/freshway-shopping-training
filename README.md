@@ -82,14 +82,17 @@ request must send the `x-bot-secret` header matching `BOT_API_SECRET`.
 ## Live boards (auto-updating)
 
 Both the **trainings** channel and the **timetable** channel show a single
-self-updating embed (a "board") that lists the upcoming sessions and is
+self-updating message (a "board") that lists the upcoming sessions and is
 refreshed **every 20 seconds** by the scheduler. Boards only edit their
 message when the content actually changed, so nothing is spammed.
 
-- **Trainings board** - lists the next sessions, each with **Join as
-  Co-Host** / **Join as Helper** buttons plus a **Refresh** button. Creating a
-  session (website or `/training-booking`) or deleting one updates this board
-  immediately.
+- **Trainings board** - a header embed ("Upcoming Training Sessions",
+  nothing else), then one embed per session (host, time, game, Co-Hosts,
+  Helpers) each with its own **Manage** button, and a **Refresh** button on
+  its own line under the last session. Creating/deleting a session, or
+  someone joining/leaving, updates the board immediately (including the
+  Co-Hosts / Helpers lines). Up to 4 sessions fit on the board; the rest are
+  shown on the timetable.
 - **Timetable board** - full schedule with a **Refresh** button (and a
   **View on Portal** link when `FRESHWAY_PORTAL_URL` is set).
 
@@ -110,13 +113,15 @@ Session lifecycle notices (status changes, deletions) are logged to the
 - `/punish <user> <type> <reason>` - issue a punishment (Trainer/Staff/Management)
 - `/timetable` - post the training schedule to the timetable channel as an embed with a **Refresh** button (and a **View on Portal** link when `FRESHWAY_PORTAL_URL` is set). With no sessions it just says no sessions are scheduled.
 - `/verify-setup` - post the Training Division verification welcome embed to the verification channel (Trainer/Staff/Management)
-- `/training-booking` - book a training session or shift. Opens a **session-type select menu** (Training, Store Shift, Promotional Shift, Community Event) and a **Cancel** button; picking a type opens the booking **modal** (title, when, game link, description, max participants). The session is created straight into Supabase (same system as the portal, host = you) and appears on the trainings board with join buttons (Trainer/Staff/Management)
+- `/training-booking` - book a training session or shift. Opens a **session-type select menu** (Training, Store Shift, Promotional Shift, Community Event) and a **Cancel** button; picking a type opens the booking **modal** (title, when, game link, description, max participants). The session is created straight into Supabase (same system as the portal, host = you) and appears on the trainings board with a **Manage** button (Trainer/Staff/Management)
 - `/voting` - open a staff case for a Training Leadership vote (TM only)
 - `/punishment-issue` - coming soon (formats still being worked on)
 - `/trial-referral` - unavailable at the moment
 
-The **Join as Co-Host** / **Join as Helper** buttons on the trainings board
-register the signup directly in Supabase: the Discord id is resolved to a
+Each session on the trainings board has a **Manage** button that opens a
+for-your-eyes-only message with **Join as Co-Host** / **Join as Helper**
+buttons - or a **Leave** button when you have already joined. Joining and
+leaving register directly in Supabase: the Discord id is resolved to a
 profile (Roblox name + staff status), the signup is written to
 `training_session_signups`, the session's co-host/helper arrays are updated,
 and the session host is notified via DM.
