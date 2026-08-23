@@ -109,6 +109,12 @@ src/
     └── api.js            # HTTP API the website calls
 ```
 
+## Troubleshooting
+
+- **Node.js 20** works — `ws` is bundled as the WebSocket transport for
+  supabase-js (which needs one on runtimes without a native WebSocket).
+  supabase-js recommends Node 22+.
+
 ## License
 
 MIT

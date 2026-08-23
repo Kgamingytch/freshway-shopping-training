@@ -29,7 +29,13 @@ module.exports = {
       console.warn("[CONFIG] BOT_API_SECRET not set — HTTP API disabled");
     }
 
-    await refreshPresence(client);
+    // Presence is best-effort — never let it block the API or schedulers.
+    try {
+      await refreshPresence(client);
+    } catch (e) {
+      console.error("[READY] Presence init failed:", e);
+    }
+
     startApi(client);
     scheduleTasks(client);
   },
