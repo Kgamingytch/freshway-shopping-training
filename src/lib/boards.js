@@ -25,7 +25,8 @@ const TRAININGS_REFRESH_ID = "trainings_board_refresh";
 
 // Discord renders every action row below ALL embeds in a message, so each
 // session gets its own message: the Manage button sits directly under its
-// own embed. The board is a header message + one message per session.
+// own embed. The board is a header message (title + Refresh button) plus
+// one message per session.
 const HEADER_TITLE = "Upcoming Training Sessions";
 const NO_SESSIONS_DESC = "> **No sessions scheduled.**";
 
@@ -163,19 +164,20 @@ function buildRefreshRow() {
   );
 }
 
-/** Payload for one session message: embed + Manage row (+ Refresh when last). */
-function buildSessionMessagePayload(session, { isLast }) {
-  const components = [buildSessionManageRow(session.id)];
-  if (isLast) components.push(buildRefreshRow());
-  return { embeds: [buildSessionEmbed(session)], components };
+/** Payload for one session message: embed + its own Manage row. */
+function buildSessionMessagePayload(session) {
+  return {
+    embeds: [buildSessionEmbed(session)],
+    components: [buildSessionManageRow(session.id)],
+  };
 }
 
 /**
  * Update the trainings board: a header message ("Upcoming Training
- * Sessions", nothing else), then one message per session with its own
- * Manage button under its embed. Only the last session's message carries
- * the Refresh row. Messages are edited in place when their content changed,
- * new sessions are posted at the end, removed sessions are deleted.
+ * Sessions", nothing else) with the Refresh button on its own row under it,
+ * then one message per session with its own Manage button under its embed.
+ * Messages are edited in place when their content changed, new sessions are
+ * posted at the end, removed sessions are deleted.
  */
 async function updateTrainingsBoard(client) {
   const id = config.channels.trainings();
@@ -217,32 +219,50 @@ async function updateTrainingsBoard(client) {
   };
 
   let changed = false;
+  const deleted = new Set();
 
-  // Remove the old single-message board layout (header embed + buttons in
-  // one message) if it still exists.
+  const hasManageButton = (m) =>
+    (m.components ?? []).some((row) =>
+      (row.components ?? []).some((b) => (buttonId(b) ?? "").startsWith(MANAGE_PREFIX)),
+    );
+  const hasRefreshButton = (m) =>
+    (m.components ?? []).some((row) =>
+      (row.components ?? []).some((b) => buttonId(b) === TRAININGS_REFRESH_ID),
+    );
+
+  // Remove the old single-message board layout (header embed + session
+  // embeds + Manage rows in ONE message) if it still exists.
   for (const m of list) {
-    if (
-      isBot(m) &&
-      (m.components?.length ?? 0) > 0 &&
-      m.embeds?.[0]?.title === HEADER_TITLE
-    ) {
+    if (isBot(m) && m.embeds?.[0]?.title === HEADER_TITLE && hasManageButton(m)) {
       await m.delete().catch(() => {});
+      deleted.add(m.id);
       changed = true;
     }
   }
+  const alive = (m) => !deleted.has(m.id);
 
-  // Header message: only the title, nothing else.
-  let header = list.find(
-    (m) =>
-      isBot(m) &&
-      m.embeds?.[0]?.title === HEADER_TITLE &&
-      (m.components?.length ?? 0) === 0,
-  ) ?? null;
+  // Header message: only the title, nothing else, with the Refresh button
+  // on its own row directly under it.
+  const headerEmbed = boardEmbed({ title: HEADER_TITLE, description: "" });
+  const headers = list.filter(
+    (m) => isBot(m) && alive(m) && m.embeds?.[0]?.title === HEADER_TITLE,
+  );
+  let header = headers.find(hasRefreshButton) ?? null;
   if (!header) {
-    header = await channel
-      .send({ embeds: [boardEmbed({ title: HEADER_TITLE, description: "" })] })
-      .catch(() => null);
-    changed = true;
+    // Upgrade a button-less header (previous layout) in place.
+    const plain = headers.find((m) => (m.components?.length ?? 0) === 0);
+    if (plain) {
+      await plain
+        .edit({ embeds: [headerEmbed], components: [buildRefreshRow()] })
+        .catch(() => {});
+      header = plain;
+      changed = true;
+    } else {
+      header = await channel
+        .send({ embeds: [headerEmbed], components: [buildRefreshRow()] })
+        .catch(() => null);
+      changed = true;
+    }
   }
 
   // No sessions: a single "No sessions scheduled." message under the header.
@@ -297,10 +317,10 @@ async function updateTrainingsBoard(client) {
     }
   }
 
-  // Upsert session messages in order; the last one carries the Refresh row.
+  // Upsert session messages in order.
   for (let i = 0; i < sessions.length; i++) {
     const session = sessions[i];
-    const payload = buildSessionMessagePayload(session, { isLast: i === sessions.length - 1 });
+    const payload = buildSessionMessagePayload(session);
     const existing = byId.get(session.id);
     if (existing) {
       const newFp = `${payload.embeds.map(embedFingerprint).join("|")}::${componentsFingerprint(payload.components)}`;

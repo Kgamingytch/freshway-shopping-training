@@ -87,13 +87,12 @@ refreshed **every 20 seconds** by the scheduler. Boards only edit their
 message when the content actually changed, so nothing is spammed.
 
 - **Trainings board** - a header message ("Upcoming Training Sessions",
-  nothing else), then **one message per session** (host, time, game,
-  Co-Hosts, Helpers) so each session's **Manage** button sits directly under
-  its own embed, and a **Refresh** button on its own line under the last
-  session. Discord renders all buttons below every embed in a message, so
-  each session gets its own message. Creating/deleting a session, or someone
-  joining/leaving, updates the board immediately (including the Co-Hosts /
-  Helpers lines).
+  nothing else) with the **Refresh** button on its own row under it, then
+  **one message per session** (host, time, game, Co-Hosts, Helpers) so each
+  session's **Manage** button sits directly under its own embed. Discord
+  renders all buttons below every embed in a message, so each session gets
+  its own message. Creating/deleting a session, or someone joining/leaving,
+  updates the board immediately (including the Co-Hosts / Helpers lines).
 - **Timetable board** - full schedule with a **Refresh** button (and a
   **View on Portal** link when `FRESHWAY_PORTAL_URL` is set).
 
