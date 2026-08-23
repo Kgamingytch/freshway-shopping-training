@@ -11,10 +11,11 @@ const { getSupabase } = require("./supabase");
 const { sendDiscordDm } = require("./dms");
 const {
   sendChannelEmbed,
-  sendTrainingChannelEmbed,
+  sendLogEmbed,
   sendAnnouncementEmbed,
+  sendTrainingChannelEmbed,
 } = require("./channels");
-const { buildSessionJoinRow } = require("./session-join");
+const boards = require("./boards");
 const config = require("../config");
 
 // ---------- Helpers ----------
@@ -43,57 +44,24 @@ function capitalise(s) {
 
 // ---------- Session notifications ----------
 
-/** Notify the trainings channel when a new session is created. */
+/**
+ * A session was created: the live boards (trainings + timetable) are
+ * refreshed immediately so the new session appears on the single
+ * self-updating embed - no separate announcement message is posted.
+ */
 async function notifySessionCreated(client, sessionId) {
   try {
-    const sb = getSupabase();
-    if (!sb) {
-      console.warn("[Notify] SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY not set - skipping session-created notification");
-      return;
-    }
-    const { data: session } = await sb
-      .from("training_sessions")
-      .select("*")
-      .eq("id", sessionId)
-      .single();
-    if (!session) return;
-
-    let hostName = "Unassigned";
-    if (session.host_user_id) {
-      const { data: profile } = await sb
-        .from("profiles")
-        .select("discord_username")
-        .eq("id", session.host_user_id)
-        .maybeSingle();
-      const { data: roblox } = await sb
-        .from("roblox_accounts")
-        .select("roblox_username")
-        .eq("user_id", session.host_user_id)
-        .maybeSingle();
-      hostName = roblox?.roblox_username ?? profile?.discord_username ?? "Unknown";
-    }
-
-    const description = [
-      `> **Host:** ${hostName}`,
-      `> **Scheduled:** ${unixTimestamp(session.scheduled_at)}`,
-      session.description ? `> ${session.description.slice(0, 200)}` : "",
-      session.roblox_game_link ? `> **Game:** [Join Server](${session.roblox_game_link})` : "",
-      session.discord_channel ? `> **Discord:** ${session.discord_channel}` : "",
-    ].filter(Boolean).join("\n");
-
-    await sendChannelEmbed(client, {
-      channelKey: "trainings",
-      title: `New Training Session: ${session.title}`,
-      description,
-      mentionRoleId: config.roles.trainer() ?? undefined,
-      components: [buildSessionJoinRow(session.id)],
-    });
+    if (!sessionId) return;
+    await Promise.all([
+      boards.updateTrainingsBoard(client).catch(() => {}),
+      boards.updateTimetableBoard(client).catch(() => {}),
+    ]);
   } catch (e) {
-    console.error("[Notify] Failed to notify session created:", e);
+    console.error("[Notify] Failed to refresh boards after session created:", e);
   }
 }
 
-/** Notify the trainings channel when a session status changes. */
+/** Session status changed: log it to the logs channel and refresh boards. */
 async function notifySessionStatusChanged(client, sessionId, oldStatus, newStatus) {
   try {
     const sb = getSupabase();
@@ -105,7 +73,7 @@ async function notifySessionStatusChanged(client, sessionId, oldStatus, newStatu
       .single();
     if (!session) return;
 
-    await sendTrainingChannelEmbed(
+    await sendLogEmbed(
       client,
       `Session ${capitalise(newStatus)}`,
       [
@@ -114,17 +82,27 @@ async function notifySessionStatusChanged(client, sessionId, oldStatus, newStatu
         `> **Scheduled:** ${unixTimestamp(session.scheduled_at)}`,
       ].join("\n"),
     );
+
+    await Promise.all([
+      boards.updateTrainingsBoard(client).catch(() => {}),
+      boards.updateTimetableBoard(client).catch(() => {}),
+    ]);
   } catch (e) {
     console.error("[Notify] Failed to notify status change:", e);
   }
 }
 
-/** Notify the trainings channel when a session is deleted. */
+/** Session deleted: log it to the logs channel and drop it from the boards. */
 async function notifySessionDeleted(client, sessionId, title, deletedBy) {
-  await sendTrainingChannelEmbed(client, "Session Deleted", [
+  await sendLogEmbed(client, "Session Deleted", [
     `> **Session:** ${title}`,
     `> **Deleted by:** ${deletedBy}`,
   ].join("\n"));
+
+  await Promise.all([
+    boards.updateTrainingsBoard(client).catch(() => {}),
+    boards.updateTimetableBoard(client).catch(() => {}),
+  ]);
 }
 
 // ---------- Certification notifications ----------

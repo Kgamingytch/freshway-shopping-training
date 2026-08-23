@@ -79,14 +79,29 @@ request must send the `x-bot-secret` header matching `BOT_API_SECRET`.
 | `/api/presence/refresh` | `{}` | Recompute and set bot activity (scheduled-session count) |
 | `/api/timetable/post` | `{ channelId? }` | Post the training timetable (embed + buttons) to the timetable channel |
 
+## Live boards (auto-updating)
+
+Both the **trainings** channel and the **timetable** channel show a single
+self-updating embed (a "board") that lists the upcoming sessions and is
+refreshed **every 20 seconds** by the scheduler. Boards only edit their
+message when the content actually changed, so nothing is spammed.
+
+- **Trainings board** - lists the next sessions, each with **Join as
+  Co-Host** / **Join as Helper** buttons plus a **Refresh** button. Creating a
+  session (website or `/training-booking`) or deleting one updates this board
+  immediately.
+- **Timetable board** - full schedule with a **Refresh** button (and a
+  **View on Portal** link when `FRESHWAY_PORTAL_URL` is set).
+
+Session lifecycle notices (status changes, deletions) are logged to the
+**logs** channel, not the trainings channel.
+
 ## Scheduled tasks
 
+- **Live boards** (trainings + timetable) refresh every 20 seconds.
 - **Presence** refreshes every 30 minutes with live metrics from Supabase.
 - **Session reminders** (DM to hosts of sessions starting within an hour) run
   every 15 minutes.
-- **Timetable** auto-updates every 30 minutes: the last bot-posted timetable
-  message in the timetable channel is edited in place (or a new one is posted
-  if none exists), so the schedule stays current without spamming the channel.
 
 ## Slash commands
 
@@ -95,16 +110,16 @@ request must send the `x-bot-secret` header matching `BOT_API_SECRET`.
 - `/punish <user> <type> <reason>` - issue a punishment (Trainer/Staff/Management)
 - `/timetable` - post the training schedule to the timetable channel as an embed with a **Refresh** button (and a **View on Portal** link when `FRESHWAY_PORTAL_URL` is set). With no sessions it just says no sessions are scheduled.
 - `/verify-setup` - post the Training Division verification welcome embed to the verification channel (Trainer/Staff/Management)
-- `/training-booking <title> [type] [when] [game-link] [description] [max-participants] [host]` - book a training session or shift straight into Supabase (same system as the portal) and post it to the trainings channel with join buttons (Trainer/Staff/Management)
+- `/training-booking <title> [type] [when] [game-link] [description] [max-participants] [host]` - book a training session or shift straight into Supabase (same system as the portal). It appears on the trainings board with join buttons (Trainer/Staff/Management)
 - `/voting` - open a staff case for a Training Leadership vote (TM only)
 - `/punishment-issue` - coming soon (formats still being worked on)
 - `/trial-referral` - unavailable at the moment
 
-Session announcements posted to the trainings channel include **Join as
-Co-Host** / **Join as Helper** buttons. Clicking one sends the Discord user id,
-session id and role to the website's `/api/training/discord-signup` endpoint,
-which converts the Discord id into a profile (Roblox name + staff status) and
-registers the signup.
+The **Join as Co-Host** / **Join as Helper** buttons on the trainings board
+register the signup directly in Supabase: the Discord id is resolved to a
+profile (Roblox name + staff status), the signup is written to
+`training_session_signups`, the session's co-host/helper arrays are updated,
+and the session host is notified via DM.
 
 ## Training Division features
 

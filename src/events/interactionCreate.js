@@ -1,5 +1,6 @@
 const { Events, MessageFlags } = require("discord.js");
 const { updateTimetableMessage, TIMETABLE_REFRESH_ID } = require("../lib/timetable");
+const { updateTrainingsBoard, TRAININGS_REFRESH_ID } = require("../lib/boards");
 const { handleSessionJoin } = require("../lib/session-join");
 const {
   VERIFY_BUTTON_ID,
@@ -32,6 +33,17 @@ module.exports = {
           await interaction
             .followUp({
               content: "Could not refresh the timetable.",
+              flags: MessageFlags.Ephemeral,
+            })
+            .catch(() => {});
+        }
+      } else if (id === TRAININGS_REFRESH_ID) {
+        await interaction.deferUpdate();
+        const ok = await updateTrainingsBoard(interaction.client);
+        if (!ok.ok) {
+          await interaction
+            .followUp({
+              content: `Could not refresh the trainings board: ${ok.error ?? "unknown error"}`,
               flags: MessageFlags.Ephemeral,
             })
             .catch(() => {});
