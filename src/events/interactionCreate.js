@@ -3,6 +3,14 @@ const { updateTimetableMessage, TIMETABLE_REFRESH_ID } = require("../lib/timetab
 const { updateTrainingsBoard, TRAININGS_REFRESH_ID } = require("../lib/boards");
 const { handleSessionJoin } = require("../lib/session-join");
 const {
+  BOOKING_SELECT_ID,
+  BOOKING_CANCEL_ID,
+  BOOKING_MODAL_ID,
+  handleBookingSelect,
+  handleBookingCancel,
+  handleBookingModal,
+} = require("../lib/booking");
+const {
   VERIFY_BUTTON_ID,
   VERIFY_ACCEPT_PREFIX,
   VERIFY_FAIL_PREFIX,
@@ -61,6 +69,16 @@ module.exports = {
         await handleVotingButton(interaction);
       } else if (id.startsWith(VOTE_YES_PREFIX) || id.startsWith(VOTE_NO_PREFIX)) {
         await handleVoteButton(interaction);
+      } else if (id === BOOKING_CANCEL_ID) {
+        await handleBookingCancel(interaction);
+      }
+      return;
+    }
+
+    // ---- Select menus ----
+    if (interaction.isStringSelectMenu()) {
+      if (interaction.customId === BOOKING_SELECT_ID) {
+        await handleBookingSelect(interaction);
       }
       return;
     }
@@ -71,6 +89,8 @@ module.exports = {
         await handleVerificationModal(interaction);
       } else if (interaction.customId === VOTE_MODAL_ID) {
         await handleVotingModal(interaction);
+      } else if (interaction.customId.startsWith(BOOKING_MODAL_ID)) {
+        await handleBookingModal(interaction);
       }
       return;
     }
