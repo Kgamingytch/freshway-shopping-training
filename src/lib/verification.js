@@ -190,6 +190,7 @@ async function collectProofInDm(client, userId) {
   }
   try {
     const collected = await dm.awaitMessages({
+      filter: (m) => m.author.id === userId && !m.author.bot,
       max: 1,
       time: PROOF_DM_TIMEOUT_MS,
       errors: ["time"],
