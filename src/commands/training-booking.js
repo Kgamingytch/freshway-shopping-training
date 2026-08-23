@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, MessageFlags } = require("discord.js");
-const { buildBookingRow } = require("../lib/booking");
+const { buildBookingRows } = require("../lib/booking");
 const { canManage } = require("../lib/guards");
 
 module.exports = {
@@ -20,7 +20,7 @@ module.exports = {
     // created and the trainings board updates.
     await interaction.reply({
       content: "Select a **session type** to continue:",
-      components: [buildBookingRow()],
+      components: buildBookingRows(),
       flags: MessageFlags.Ephemeral,
     });
   },

@@ -25,8 +25,8 @@ const BOOKING_SELECT_ID = "booking_type_select";
 const BOOKING_CANCEL_ID = "booking_cancel";
 const BOOKING_MODAL_ID = "booking_modal"; // actual id is `booking_modal:<type>`
 
-/** Row with the session-type select menu and a Cancel button. */
-function buildBookingRow() {
+/** Action rows for the booking prompt: select menu + cancel button (separate rows, because a select menu fills its row). */
+function buildBookingRows() {
   const select = new StringSelectMenuBuilder()
     .setCustomId(BOOKING_SELECT_ID)
     .setPlaceholder("Choose a session type")
@@ -35,7 +35,10 @@ function buildBookingRow() {
     .setCustomId(BOOKING_CANCEL_ID)
     .setLabel("Cancel")
     .setStyle(ButtonStyle.Secondary);
-  return new ActionRowBuilder().addComponents(select, cancel);
+  return [
+    new ActionRowBuilder().addComponents(select),
+    new ActionRowBuilder().addComponents(cancel),
+  ];
 }
 
 /** Build the booking modal; the session type rides in the custom id. */
@@ -196,7 +199,7 @@ module.exports = {
   BOOKING_SELECT_ID,
   BOOKING_CANCEL_ID,
   BOOKING_MODAL_ID,
-  buildBookingRow,
+  buildBookingRows,
   buildBookingModal,
   handleBookingSelect,
   handleBookingCancel,
