@@ -65,4 +65,15 @@ process.on("uncaughtException", (err) => {
 
 // --- Login ---
 console.log(`[BOOT] Starting ${config.bot.name} v${config.bot.version}...`);
-client.login(process.env.DISCORD_TOKEN);
+client
+  .login(process.env.DISCORD_TOKEN)
+  .then(() => {
+    // Sync slash commands on every start so the panel never has to run
+    // deploy-commands manually.
+    const { syncCommands } = require("./lib/sync-commands");
+    return syncCommands();
+  })
+  .catch((err) => {
+    console.error("[FATAL] Failed to log in:", err);
+    process.exit(1);
+  });

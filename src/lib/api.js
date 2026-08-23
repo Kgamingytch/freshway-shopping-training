@@ -10,6 +10,7 @@ const { sendDiscordDm } = require("./dms");
 const { sendChannelEmbed } = require("./channels");
 const { addGuildRole, removeGuildRole } = require("./roles");
 const notifications = require("./notifications");
+const timetable = require("./timetable");
 const { refreshPresence } = require("./presence");
 const { getUserProfile } = require("./avatar");
 
@@ -107,6 +108,11 @@ function startApi(client) {
         case "/api/notify/reminders": {
           const result = await notifications.sendSessionReminders(client);
           return sendJson(res, 200, { ok: true, sent: result.sent, errors: result.errors });
+        }
+
+        case "/api/timetable/post": {
+          const result = await timetable.postTimetable(client, { channelId: body.channelId });
+          return sendJson(res, 200, result);
         }
 
         case "/api/dm": {

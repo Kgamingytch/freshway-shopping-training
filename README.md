@@ -67,7 +67,8 @@ request must send the `x-bot-secret` header matching `BOT_API_SECRET`.
 | `/api/notify/reminders` | `{}` | Run the session-reminder sweep now (returns `{ sent, errors }`) |
 | `/api/dm` | `{ discordId, title, description, color? }` | Send a DM embed |
 | `/api/role` | `{ userId, roleId?, action: "add"\|"remove", guildId? }` | Add/remove trainer role (roleId defaults to trainer role) |
-| `/api/presence/refresh` | `{}` | Recompute and set bot activity |
+| `/api/presence/refresh` | `{}` | Recompute and set bot activity (scheduled-session count) |
+| `/api/timetable/post` | `{ channelId? }` | Post the training timetable (embed + buttons) to the timetable channel |
 
 ## Scheduled tasks
 
@@ -80,6 +81,11 @@ request must send the `x-bot-secret` header matching `BOT_API_SECRET`.
 - `/ping` — latency check
 - `/announce <title> <description> [channel]` — post a FreshWay embed (Trainer/Staff/Management)
 - `/punish <user> <type> <reason>` — issue a punishment (Trainer/Staff/Management)
+- `/timetable` — post the training schedule to the timetable channel as an embed with a **Refresh** button (and a **View on Portal** link when `FRESHWAY_PORTAL_URL` is set). With no sessions it just says no sessions are scheduled.
+
+Slash commands are **synced automatically on every start** (guild-scoped when
+`GUILD_ID` is set), so there's no need to run `npm run deploy-commands` after
+pulling.
 
 ## Project Structure
 
