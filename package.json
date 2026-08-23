@@ -8,10 +8,17 @@
     "dev": "node --watch src/index.js",
     "deploy-commands": "node src/deploy-commands.js"
   },
-  "keywords": ["discord", "bot", "freshway", "training", "shopping"],
+  "keywords": [
+    "discord",
+    "bot",
+    "freshway",
+    "training",
+    "shopping"
+  ],
   "author": "Kgamingytch",
   "license": "MIT",
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.3",
     "discord.js": "^14.18.0",
     "dotenv": "^16.4.0"
   }
