@@ -45,9 +45,17 @@ npm run dev
 | `FRESHWAY_CHANNEL_TIMETABLE` | ❌ | Timetable channel ID |
 | `FRESHWAY_CHANNEL_PUNISHMENT_LOGS` | ❌ | Punishment logs channel ID (falls back to logs) |
 | `FRESHWAY_CHANNEL_ANNOUNCEMENTS` | ❌ | Announcements channel ID (monthly reports) |
+| `FRESHWAY_CHANNEL_VERIFICATION` | ❌ | Verification welcome channel (defaults to `1525788502648950855`) |
+| `FRESHWAY_CHANNEL_VERIFICATION_REVIEWS` | ❌ | Verification review channel (defaults to `1525794994932154449`) |
+| `FRESHWAY_CHANNEL_VOTING` | ❌ | Staff-case voting channel (defaults to `1525791566919110736`) |
+| `FRESHWAY_CHANNEL_MESSAGE_LOGS` | ❌ | Edited/deleted message log channel (defaults to `1525794474846982275`) |
 | `FRESHWAY_ROLE_TRAINER` | ✅ | Certified Trainer role ID |
 | `FRESHWAY_ROLE_STAFF` | ❌ | Staff role ID (command access) |
 | `FRESHWAY_ROLE_MANAGEMENT` | ❌ | Management role ID (command access) |
+| `FRESHWAY_ROLE_DIRECTORY` | ❌ | Directory role ID (assigned on accepted verification) |
+| `FRESHWAY_ROLE_TM` | ❌ | Training Manager role ID (falls back to Management) |
+| `FRESHWAY_ROLE_TRAINING_LEADERSHIP` | ❌ | Training Leadership role ID (falls back to Management) |
+| `FRESHWAY_VOTE_THRESHOLD` | ❌ | Staff-case auto-resolve threshold (default `5`) |
 | `FRESHWAY_SITE_URL` | ❌ | Base URL of the FreshWay website. The bot calls it to register "Join as Co-Host" / "Join as Helper" button clicks (`POST /api/training/discord-signup`, shared `BOT_API_SECRET`). |
 
 ## HTTP API
@@ -86,12 +94,39 @@ request must send the `x-bot-secret` header matching `BOT_API_SECRET`.
 - `/announce <title> <description> [channel]` - post a FreshWay embed (Trainer/Staff/Management)
 - `/punish <user> <type> <reason>` - issue a punishment (Trainer/Staff/Management)
 - `/timetable` - post the training schedule to the timetable channel as an embed with a **Refresh** button (and a **View on Portal** link when `FRESHWAY_PORTAL_URL` is set). With no sessions it just says no sessions are scheduled.
+- `/verify-setup` - post the Training Division verification welcome embed to the verification channel (Trainer/Staff/Management)
+- `/training-booking <title> [type] [when] [game-link] [description] [max-participants] [host]` - book a training session or shift straight into Supabase (same system as the portal) and post it to the trainings channel with join buttons (Trainer/Staff/Management)
+- `/voting` - open a staff case for a Training Leadership vote (TM only)
+- `/punishment-issue` - coming soon (formats still being worked on)
+- `/trial-referral` - unavailable at the moment
 
 Session announcements posted to the trainings channel include **Join as
 Co-Host** / **Join as Helper** buttons. Clicking one sends the Discord user id,
 session id and role to the website's `/api/training/discord-signup` endpoint,
 which converts the Discord id into a profile (Roblox name + staff status) and
 registers the signup.
+
+## Training Division features
+
+**Verification** - a welcome embed with a **Verify & Authorization** button
+lives in the verification channel (auto-posted on startup if missing).
+Clicking it opens the application form (name/Roblox/Discord, invited by,
+requested rank, proof). Submissions are posted to the review channel with the
+proof and **Accept / Fail** buttons, pinging Training Leadership. Accepted
+requests get their requested rank role (Trainer or Directory) and the user is
+DM'd. Users with a request under review cannot submit another one.
+
+**Staff cases (/voting)** - TM-only. Opens a form (reported person, reason,
+proof), posts a case embed to the voting channel with ✅/❌ reactions, creates
+an automatic discussion thread pinging Training Leadership, and gives
+leadership **Accept** / **Close the thread & deny it** buttons. When either
+side reaches `FRESHWAY_VOTE_THRESHOLD` votes the case auto-resolves according
+to public opinion and the embed color updates.
+
+**Message logs** - edited and deleted messages (including bulk deletes) are
+logged to the message logs channel.
+
+## Scheduled tasks
 
 Slash commands are **synced automatically on every start** (guild-scoped when
 `GUILD_ID` is set), so there's no need to run `npm run deploy-commands` after
@@ -107,10 +142,20 @@ src/
 ├── commands/             # Slash commands
 │   ├── ping.js
 │   ├── announce.js
-│   └── punish.js
+│   ├── punish.js
+│   ├── timetable.js
+│   ├── verify.js
+│   ├── training-booking.js
+│   ├── voting.js
+│   ├── punishment-issue.js
+│   └── trial-referral.js
 ├── events/               # Discord events
 │   ├── ready.js          # Validates config, starts API + schedulers
-│   └── interactionCreate.js
+│   ├── interactionCreate.js
+│   ├── messageUpdate.js  # Edited-message logging
+│   ├── messageDelete.js  # Deleted-message logging
+│   ├── messageDeleteBulk.js
+│   └── messageReactionAdd.js # Staff-case votes
 └── lib/                  # FreshWay bot functions
     ├── embeds.js         # FreshWay embed builder (green, > lines, footer)
     ├── channels.js       # Channel posting (trainings/logs/timetable/...)
@@ -119,6 +164,8 @@ src/
     ├── notifications.js  # All notification templates (session, cert, punishment, reports, reminders)
     ├── presence.js       # Bot activity with live metrics
     ├── avatar.js         # Discord user profile/avatar lookups
+    ├── verification.js   # Training Division verification flow
+    ├── voting.js         # Staff-case voting system
     ├── supabase.js       # Supabase client for live data
     ├── guards.js         # Role checks for commands
     ├── scheduler.js      # Recurring tasks (presence, reminders)

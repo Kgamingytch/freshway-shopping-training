@@ -3,6 +3,7 @@ const config = require("../config");
 const { startApi } = require("../lib/api");
 const { scheduleTasks } = require("../lib/scheduler");
 const { refreshPresence } = require("../lib/presence");
+const { ensureVerification } = require("../lib/verification");
 
 module.exports = {
   name: Events.ClientReady,
@@ -35,6 +36,11 @@ module.exports = {
     } catch (e) {
       console.error("[READY] Presence init failed:", e);
     }
+
+    // Make sure the verification welcome embed exists in its channel.
+    ensureVerification(client).catch((e) =>
+      console.error("[READY] Verification init failed:", e),
+    );
 
     startApi(client);
     scheduleTasks(client);

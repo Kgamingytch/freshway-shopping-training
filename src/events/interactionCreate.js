@@ -1,5 +1,21 @@
 const { Events, MessageFlags } = require("discord.js");
 const { updateTimetableMessage, TIMETABLE_REFRESH_ID } = require("../lib/timetable");
+const { handleSessionJoin } = require("../lib/session-join");
+const {
+  VERIFY_BUTTON_ID,
+  VERIFY_ACCEPT_PREFIX,
+  VERIFY_FAIL_PREFIX,
+  handleVerifyButton,
+  handleVerificationModal,
+  handleVerificationDecision,
+} = require("../lib/verification");
+const {
+  VOTE_ACCEPT_PREFIX,
+  VOTE_DENY_PREFIX,
+  VOTE_MODAL_ID,
+  handleVotingModal,
+  handleVotingButton,
+} = require("../lib/voting");
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -7,7 +23,8 @@ module.exports = {
   async execute(interaction) {
     // ---- Buttons ----
     if (interaction.isButton()) {
-      if (interaction.customId === TIMETABLE_REFRESH_ID) {
+      const id = interaction.customId;
+      if (id === TIMETABLE_REFRESH_ID) {
         await interaction.deferUpdate();
         const ok = await updateTimetableMessage(interaction.client, interaction.message);
         if (!ok) {
@@ -18,9 +35,24 @@ module.exports = {
             })
             .catch(() => {});
         }
-      } else if (interaction.customId.startsWith("session_join_")) {
-        const { handleSessionJoin } = require("../lib/session-join");
+      } else if (id.startsWith("session_join_")) {
         await handleSessionJoin(interaction);
+      } else if (id === VERIFY_BUTTON_ID) {
+        await handleVerifyButton(interaction);
+      } else if (id.startsWith(VERIFY_ACCEPT_PREFIX) || id.startsWith(VERIFY_FAIL_PREFIX)) {
+        await handleVerificationDecision(interaction);
+      } else if (id.startsWith(VOTE_ACCEPT_PREFIX) || id.startsWith(VOTE_DENY_PREFIX)) {
+        await handleVotingButton(interaction);
+      }
+      return;
+    }
+
+    // ---- Modal submits ----
+    if (interaction.isModalSubmit()) {
+      if (interaction.customId === VERIFY_MODAL_ID) {
+        await handleVerificationModal(interaction);
+      } else if (interaction.customId === VOTE_MODAL_ID) {
+        await handleVotingModal(interaction);
       }
       return;
     }

@@ -24,4 +24,16 @@ function canManage(interaction) {
   );
 }
 
-module.exports = { canManage, isOwner, hasRole };
+/**
+ * Training Leadership (or the management role as a fallback) - used for
+ * verification decisions and staff-case buttons.
+ */
+function canLead(interaction) {
+  return (
+    isOwner(interaction) ||
+    hasRole(interaction, "trainingLeadership") ||
+    hasRole(interaction, "management")
+  );
+}
+
+module.exports = { canManage, canLead, isOwner, hasRole };

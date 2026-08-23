@@ -1,4 +1,4 @@
-// Session join buttons — "Join as Co-Host" / "Join as Helper" on session
+// Session join buttons - "Join as Co-Host" / "Join as Helper" on session
 // announcements posted to the trainings channel.
 //
 // Clicking a button sends the Discord user id + session id + role to the
