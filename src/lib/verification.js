@@ -43,8 +43,6 @@ const pendingUsers = new Map();
 /** The exact welcome copy from Training Leadership. */
 function welcomeDescription() {
   return [
-    "**FreshWay | Training Division**",
-    "",
     "Welcome dear member! Here in the Training Division there are dedicated people with the number one point of synthesizing and training new staff to reach and show their maximum capabilities. As a trainer here you will have more responsibilities that will be discussed further.",
     "",
     "> Therefore, to continue to our verification please click the button below \"Verify & Authorization\" and continue with what is said in the form. If you are and have been invited please add the proof so that the security rate is maximum and to ensure that your request will be accepted.",
