@@ -14,9 +14,12 @@ const {
 const {
   VOTE_ACCEPT_PREFIX,
   VOTE_DENY_PREFIX,
+  VOTE_YES_PREFIX,
+  VOTE_NO_PREFIX,
   VOTE_MODAL_ID,
   handleVotingModal,
   handleVotingButton,
+  handleVoteButton,
 } = require("../lib/voting");
 
 module.exports = {
@@ -56,6 +59,8 @@ module.exports = {
         await handleVerificationDecision(interaction);
       } else if (id.startsWith(VOTE_ACCEPT_PREFIX) || id.startsWith(VOTE_DENY_PREFIX)) {
         await handleVotingButton(interaction);
+      } else if (id.startsWith(VOTE_YES_PREFIX) || id.startsWith(VOTE_NO_PREFIX)) {
+        await handleVoteButton(interaction);
       }
       return;
     }

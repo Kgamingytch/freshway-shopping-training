@@ -132,11 +132,12 @@ requests get their requested rank role (Trainer or Directory) and the user is
 DM'd. Users with a request under review cannot submit another one.
 
 **Staff cases (/voting)** - TM-only. Opens a form (reported person, reason,
-proof), posts a case embed to the voting channel with ✅/❌ reactions, creates
-an automatic discussion thread pinging Training Leadership, and gives
-leadership **Accept** / **Close the thread & deny it** buttons. When either
-side reaches `FRESHWAY_VOTE_THRESHOLD` votes the case auto-resolves according
-to public opinion and the embed color updates.
+proof), posts a case embed to the voting channel with **✅ Support** /
+**❌ Decline** buttons and a live vote tally, creates an automatic discussion
+thread pinging Training Leadership, and gives leadership **Accept** /
+**Close the thread & deny it** buttons. When either side reaches
+`FRESHWAY_VOTE_THRESHOLD` votes the case auto-resolves according to public
+opinion and the embed color updates.
 
 **Message logs** - edited and deleted messages (including bulk deletes) are
 logged to the message logs channel.
@@ -170,7 +171,7 @@ src/
 │   ├── messageUpdate.js  # Edited-message logging
 │   ├── messageDelete.js  # Deleted-message logging
 │   ├── messageDeleteBulk.js
-│   └── messageReactionAdd.js # Staff-case votes
+
 └── lib/                  # FreshWay bot functions
     ├── embeds.js         # FreshWay embed builder (green, > lines, footer)
     ├── channels.js       # Channel posting (trainings/logs/timetable/...)
