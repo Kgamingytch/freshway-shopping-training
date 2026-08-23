@@ -161,12 +161,17 @@ async function notifyPunishmentIssued(client, { targetDiscord, targetDiscordId, 
       // Try to resolve the Discord ID from the profile by username
       const sb = getSupabase();
       if (sb) {
-        const { data: profile } = await sb
-          .from("profiles")
-          .select("discord_id")
-          .ilike("discord_username", String(targetDiscord).replace(/^@/, ""))
-          .maybeSingle()
-          .catch(() => ({ data: null }));
+        let profile = null;
+        try {
+          const result = await sb
+            .from("profiles")
+            .select("discord_id")
+            .ilike("discord_username", String(targetDiscord).replace(/^@/, ""))
+            .maybeSingle();
+          profile = result.data;
+        } catch (e) {
+          console.error("[Notify] Failed to resolve profile by username:", e?.message ?? e);
+        }
         if (profile?.discord_id) {
           return await sendPunishmentDm(client, profile.discord_id, type, reason, expiresAt);
         }

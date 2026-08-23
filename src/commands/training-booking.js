@@ -60,30 +60,43 @@ module.exports = {
     }
 
     // Resolve the host's profile (user id) from their Discord id.
+    // NOTE: the Supabase query builder is thenable but has no .catch(), so
+    // errors must be handled with try/catch instead of chaining .catch().
     const targetDiscordId = hostUser ? hostUser.id : interaction.user.id;
-    const { data: hostProfile } = await sb
-      .from("profiles")
-      .select("id")
-      .eq("discord_id", targetDiscordId)
-      .maybeSingle()
-      .catch(() => ({ data: null }));
-    const hostUserId = hostProfile?.id ?? null;
+    let hostUserId = null;
+    try {
+      const { data: hostProfile } = await sb
+        .from("profiles")
+        .select("id")
+        .eq("discord_id", targetDiscordId)
+        .maybeSingle();
+      hostUserId = hostProfile?.id ?? null;
+    } catch (e) {
+      console.error("[Booking] Failed to resolve host profile:", e?.message ?? e);
+    }
 
-    const { data: session, error } = await sb
-      .from("training_sessions")
-      .insert({
-        title,
-        session_type: type,
-        host_user_id: hostUserId,
-        description: description ?? null,
-        roblox_game_link: gameLink ?? null,
-        scheduled_at: scheduledAt,
-        max_participants: maxParticipants ?? null,
-        status: "scheduled",
-      })
-      .select("id, title, scheduled_at")
-      .single()
-      .catch((e) => ({ data: null, error: e }));
+    let session = null;
+    let error = null;
+    try {
+      const result = await sb
+        .from("training_sessions")
+        .insert({
+          title,
+          session_type: type,
+          host_user_id: hostUserId,
+          description: description ?? null,
+          roblox_game_link: gameLink ?? null,
+          scheduled_at: scheduledAt,
+          max_participants: maxParticipants ?? null,
+          status: "scheduled",
+        })
+        .select("id, title, scheduled_at")
+        .single();
+      session = result.data;
+      error = result.error;
+    } catch (e) {
+      error = e;
+    }
 
     if (error || !session) {
       return interaction.editReply({
