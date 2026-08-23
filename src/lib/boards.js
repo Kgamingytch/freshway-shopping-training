@@ -17,15 +17,17 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const { getSupabase } = require("./supabase");
 const { buildEmbed } = require("./embeds");
-const { buildSessionManageRow } = require("./session-join");
+const { buildSessionManageRow, MANAGE_PREFIX } = require("./session-join");
 const config = require("../config");
 
 const TIMETABLE_REFRESH_ID = "timetable_refresh";
 const TRAININGS_REFRESH_ID = "trainings_board_refresh";
 
-// Discord allows at most 5 action rows per message; each session needs its
-// own Manage row, plus one Refresh row at the bottom -> 4 sessions max.
-const TRAININGS_BOARD_LIMIT = 4;
+// Discord renders every action row below ALL embeds in a message, so each
+// session gets its own message: the Manage button sits directly under its
+// own embed. The board is a header message + one message per session.
+const HEADER_TITLE = "Upcoming Training Sessions";
+const NO_SESSIONS_DESC = "> **No sessions scheduled.**";
 
 function portalBase() {
   return process.env.FRESHWAY_PORTAL_URL?.trim().replace(/\/+$/, "") || null;
@@ -127,7 +129,7 @@ function buildTimetableRow() {
   return row;
 }
 
-// ---------- Trainings board ----------
+// ---------- Trainings board (one message per session) ----------
 
 /** Build an embed, omitting the title key when there is none. */
 function boardEmbed({ title, description }) {
@@ -136,63 +138,185 @@ function boardEmbed({ title, description }) {
   return embed;
 }
 
-/**
- * Trainings board embeds: a header embed with only the title, then one
- * embed per session (host, time, game, Co-Hosts, Helpers), and a note when
- * more sessions exist than fit on the board.
- */
-function buildTrainingsBoardEmbeds(sessions) {
-  const embeds = [boardEmbed({ title: "Upcoming Training Sessions", description: "" })];
+/** One session's embed: host, time, game, Co-Hosts, Helpers. */
+function buildSessionEmbed(session) {
+  const time = session.scheduled_at
+    ? `<t:${Math.floor(new Date(session.scheduled_at).getTime() / 1000)}:F>`
+    : "Not scheduled";
+  const lines = [
+    `> Host: ${session.hostName}`,
+    `> Time: ${time}`,
+    session.roblox_game_link ? `> Game: [Join Server](${session.roblox_game_link})` : "",
+    `> Co-Hosts: ${session.coHostNames.length ? session.coHostNames.join(", ") : "None"}`,
+    `> Helpers: ${session.helperNames.length ? session.helperNames.join(", ") : "None"}`,
+  ].filter(Boolean);
+  return boardEmbed({ title: session.title, description: lines.join("\n") });
+}
 
-  const shown = sessions.slice(0, TRAININGS_BOARD_LIMIT);
-  if (!shown.length) {
-    embeds.push(boardEmbed({ description: "> **No sessions scheduled.**" }));
-    return embeds;
-  }
+/** Refresh button on its own row (only the last session message has it). */
+function buildRefreshRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(TRAININGS_REFRESH_ID)
+      .setLabel("Refresh")
+      .setStyle(ButtonStyle.Secondary),
+  );
+}
 
-  for (const s of shown) {
-    const time = s.scheduled_at
-      ? `<t:${Math.floor(new Date(s.scheduled_at).getTime() / 1000)}:F>`
-      : "Not scheduled";
-    const lines = [
-      `> Host: ${s.hostName}`,
-      `> Time: ${time}`,
-      s.roblox_game_link ? `> Game: [Join Server](${s.roblox_game_link})` : "",
-      `> Co-Hosts: ${s.coHostNames.length ? s.coHostNames.join(", ") : "None"}`,
-      `> Helpers: ${s.helperNames.length ? s.helperNames.join(", ") : "None"}`,
-    ].filter(Boolean);
-    embeds.push(boardEmbed({ title: s.title, description: lines.join("\n") }));
-  }
-
-  if (sessions.length > TRAININGS_BOARD_LIMIT) {
-    embeds.push(
-      boardEmbed({
-        description: `> *Showing the first ${TRAININGS_BOARD_LIMIT} sessions - see the timetable for the full list.*`,
-      }),
-    );
-  }
-  return embeds;
+/** Payload for one session message: embed + Manage row (+ Refresh when last). */
+function buildSessionMessagePayload(session, { isLast }) {
+  const components = [buildSessionManageRow(session.id)];
+  if (isLast) components.push(buildRefreshRow());
+  return { embeds: [buildSessionEmbed(session)], components };
 }
 
 /**
- * Component rows for the trainings board: one Manage row per session, and
- * a Refresh button on its own row at the bottom (always present, even with
- * zero sessions, so the auto-updater can find this message reliably).
+ * Update the trainings board: a header message ("Upcoming Training
+ * Sessions", nothing else), then one message per session with its own
+ * Manage button under its embed. Only the last session's message carries
+ * the Refresh row. Messages are edited in place when their content changed,
+ * new sessions are posted at the end, removed sessions are deleted.
  */
-function buildTrainingsBoardComponents(sessions) {
-  const rows = [];
-  for (const s of sessions.slice(0, TRAININGS_BOARD_LIMIT)) {
-    rows.push(buildSessionManageRow(s.id));
+async function updateTrainingsBoard(client) {
+  const id = config.channels.trainings();
+  if (!id) {
+    return { ok: false, count: 0, changed: false, error: "trainings channel not configured" };
   }
-  rows.push(
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(TRAININGS_REFRESH_ID)
-        .setLabel("Refresh")
-        .setStyle(ButtonStyle.Secondary),
-    ),
-  );
-  return rows;
+  const channel = await client.channels.fetch(id).catch(() => null);
+  if (!channel || !channel.isTextBased()) {
+    return { ok: false, count: 0, changed: false, error: "trainings channel not found" };
+  }
+
+  let sessions = [];
+  try {
+    sessions = await fetchBoardSessions(10);
+  } catch (e) {
+    console.error("[Boards] Trainings board: failed to fetch sessions:", e);
+    return { ok: false, count: 0, changed: false, error: "Failed to fetch sessions" };
+  }
+
+  const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+  const list = messages ? [...messages.values()] : [];
+  const isBot = (m) => m.author?.id === client.user.id;
+
+  // The session id a message belongs to, or null when it is not a session
+  // message. Messages with more than one Manage button are the old combined
+  // board layout and return null so they get cleaned up.
+  const manageIdOf = (m) => {
+    let found = null;
+    for (const row of m.components ?? []) {
+      for (const b of row.components ?? []) {
+        const bid = buttonId(b);
+        if (bid && bid.startsWith(MANAGE_PREFIX)) {
+          if (found !== null) return null;
+          found = bid.slice(MANAGE_PREFIX.length);
+        }
+      }
+    }
+    return found;
+  };
+
+  let changed = false;
+
+  // Remove the old single-message board layout (header embed + buttons in
+  // one message) if it still exists.
+  for (const m of list) {
+    if (
+      isBot(m) &&
+      (m.components?.length ?? 0) > 0 &&
+      m.embeds?.[0]?.title === HEADER_TITLE
+    ) {
+      await m.delete().catch(() => {});
+      changed = true;
+    }
+  }
+
+  // Header message: only the title, nothing else.
+  let header = list.find(
+    (m) =>
+      isBot(m) &&
+      m.embeds?.[0]?.title === HEADER_TITLE &&
+      (m.components?.length ?? 0) === 0,
+  ) ?? null;
+  if (!header) {
+    header = await channel
+      .send({ embeds: [boardEmbed({ title: HEADER_TITLE, description: "" })] })
+      .catch(() => null);
+    changed = true;
+  }
+
+  // No sessions: a single "No sessions scheduled." message under the header.
+  if (!sessions.length) {
+    for (const m of list) {
+      if (manageIdOf(m) !== null) {
+        await m.delete().catch(() => {});
+        changed = true;
+      }
+    }
+    const noSessions = list.find(
+      (m) =>
+        isBot(m) &&
+        m.embeds?.[0]?.description === NO_SESSIONS_DESC &&
+        (m.components?.length ?? 0) === 0,
+    ) ?? null;
+    if (!noSessions) {
+      await channel
+        .send({ embeds: [boardEmbed({ description: NO_SESSIONS_DESC })] })
+        .catch(() => {});
+      changed = true;
+    }
+    if (changed) console.log(`[Boards] Trainings board updated in ${id} (no sessions)`);
+    return { ok: true, count: 0, changed };
+  }
+
+  // Remove a stale "No sessions" message when sessions exist again.
+  for (const m of list) {
+    if (
+      isBot(m) &&
+      m.embeds?.[0]?.description === NO_SESSIONS_DESC &&
+      (m.components?.length ?? 0) === 0
+    ) {
+      await m.delete().catch(() => {});
+      changed = true;
+    }
+  }
+
+  // Map each existing session message to its session id.
+  const byId = new Map();
+  for (const m of list) {
+    const sid = manageIdOf(m);
+    if (sid !== null) byId.set(sid, m);
+  }
+
+  // Delete messages for sessions that no longer exist.
+  const desiredIds = new Set(sessions.map((s) => s.id));
+  for (const [sid, m] of byId) {
+    if (!desiredIds.has(sid)) {
+      await m.delete().catch(() => {});
+      changed = true;
+    }
+  }
+
+  // Upsert session messages in order; the last one carries the Refresh row.
+  for (let i = 0; i < sessions.length; i++) {
+    const session = sessions[i];
+    const payload = buildSessionMessagePayload(session, { isLast: i === sessions.length - 1 });
+    const existing = byId.get(session.id);
+    if (existing) {
+      const newFp = `${payload.embeds.map(embedFingerprint).join("|")}::${componentsFingerprint(payload.components)}`;
+      const oldFp = `${(existing.embeds ?? []).map(embedFingerprint).join("|")}::${componentsFingerprint(existing.components)}`;
+      if (newFp !== oldFp) {
+        await existing.edit(payload).catch((e) => console.error("[Boards] Failed to edit session message:", e));
+        changed = true;
+      }
+    } else {
+      await channel.send(payload).catch((e) => console.error("[Boards] Failed to post session message:", e));
+      changed = true;
+    }
+  }
+
+  if (changed) console.log(`[Boards] Trainings board updated in ${id} (${sessions.length} sessions)`);
+  return { ok: true, count: sessions.length, changed };
 }
 
 // ---------- Shared auto-update engine ----------
@@ -283,17 +407,6 @@ async function autoUpdateBoard(client, { channelKey, markerId, buildEmbedsFn, bu
 }
 
 /** Refresh the trainings channel board (session list + join buttons). */
-async function updateTrainingsBoard(client) {
-  return autoUpdateBoard(client, {
-    channelKey: "trainings",
-    markerId: TRAININGS_REFRESH_ID,
-    buildEmbedsFn: buildTrainingsBoardEmbeds,
-    buildComponentsFn: buildTrainingsBoardComponents,
-    fetchLimit: TRAININGS_BOARD_LIMIT + 1,
-    label: "Trainings board",
-  });
-}
-
 /** Refresh the timetable channel board. */
 async function updateTimetableBoard(client) {
   return autoUpdateBoard(client, {
@@ -309,12 +422,11 @@ async function updateTimetableBoard(client) {
 module.exports = {
   TIMETABLE_REFRESH_ID,
   TRAININGS_REFRESH_ID,
-  TRAININGS_BOARD_LIMIT,
   fetchBoardSessions,
   buildTimetableBoardEmbed,
   buildTimetableRow,
-  buildTrainingsBoardEmbeds,
-  buildTrainingsBoardComponents,
+  buildSessionEmbed,
+  buildSessionMessagePayload,
   autoUpdateBoard,
   updateTrainingsBoard,
   updateTimetableBoard,

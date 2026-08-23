@@ -86,13 +86,14 @@ self-updating message (a "board") that lists the upcoming sessions and is
 refreshed **every 20 seconds** by the scheduler. Boards only edit their
 message when the content actually changed, so nothing is spammed.
 
-- **Trainings board** - a header embed ("Upcoming Training Sessions",
-  nothing else), then one embed per session (host, time, game, Co-Hosts,
-  Helpers) each with its own **Manage** button, and a **Refresh** button on
-  its own line under the last session. Creating/deleting a session, or
-  someone joining/leaving, updates the board immediately (including the
-  Co-Hosts / Helpers lines). Up to 4 sessions fit on the board; the rest are
-  shown on the timetable.
+- **Trainings board** - a header message ("Upcoming Training Sessions",
+  nothing else), then **one message per session** (host, time, game,
+  Co-Hosts, Helpers) so each session's **Manage** button sits directly under
+  its own embed, and a **Refresh** button on its own line under the last
+  session. Discord renders all buttons below every embed in a message, so
+  each session gets its own message. Creating/deleting a session, or someone
+  joining/leaving, updates the board immediately (including the Co-Hosts /
+  Helpers lines).
 - **Timetable board** - full schedule with a **Refresh** button (and a
   **View on Portal** link when `FRESHWAY_PORTAL_URL` is set).
 
