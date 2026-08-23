@@ -12,9 +12,9 @@ const { sendDiscordDm } = require("./dms");
 const {
   sendChannelEmbed,
   sendTrainingChannelEmbed,
-  sendLogEmbed,
   sendAnnouncementEmbed,
 } = require("./channels");
+const { buildSessionJoinRow } = require("./session-join");
 const config = require("../config");
 
 // ---------- Helpers ----------
@@ -86,6 +86,7 @@ async function notifySessionCreated(client, sessionId) {
       title: `New Training Session: ${session.title}`,
       description,
       mentionRoleId: config.roles.trainer() ?? undefined,
+      components: [buildSessionJoinRow(session.id)],
     });
   } catch (e) {
     console.error("[Notify] Failed to notify session created:", e);
@@ -118,9 +119,9 @@ async function notifySessionStatusChanged(client, sessionId, oldStatus, newStatu
   }
 }
 
-/** Log when a session is deleted. */
+/** Notify the trainings channel when a session is deleted. */
 async function notifySessionDeleted(client, sessionId, title, deletedBy) {
-  await sendLogEmbed(client, "Session Deleted", [
+  await sendTrainingChannelEmbed(client, "Session Deleted", [
     `> **Session:** ${title}`,
     `> **Deleted by:** ${deletedBy}`,
   ].join("\n"));

@@ -18,7 +18,7 @@ function channelIdFor(key) {
  * Returns true on success, false on any failure (missing config, missing
  * channel, Discord error) - callers treat this as best-effort.
  */
-async function sendChannelEmbed(client, { channelId, channelKey, title, description, color, mentionRoleId }) {
+async function sendChannelEmbed(client, { channelId, channelKey, title, description, color, mentionRoleId, components }) {
   const id = channelId || (channelKey ? channelIdFor(channelKey) : null);
   if (!id) {
     console.warn(`[Channel] No channel ID configured for "${channelKey || "unknown"}"`);
@@ -33,7 +33,11 @@ async function sendChannelEmbed(client, { channelId, channelKey, title, descript
 
   const content = mentionRoleId ? `<@&${mentionRoleId}>` : " ";
   try {
-    await channel.send({ content, embeds: [buildEmbed({ title, description, color })] });
+    await channel.send({
+      content,
+      embeds: [buildEmbed({ title, description, color })],
+      ...(components ? { components } : {}),
+    });
     console.log(`[Channel] Embed sent to ${id}: ${title}`);
     return true;
   } catch (e) {

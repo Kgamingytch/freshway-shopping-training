@@ -15,6 +15,9 @@ module.exports = {
             .followUp({ content: "Could not refresh the timetable.", ephemeral: true })
             .catch(() => {});
         }
+      } else if (interaction.customId.startsWith("session_join_")) {
+        const { handleSessionJoin } = require("../lib/session-join");
+        await handleSessionJoin(interaction);
       }
       return;
     }

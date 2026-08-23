@@ -48,6 +48,7 @@ npm run dev
 | `FRESHWAY_ROLE_TRAINER` | ✅ | Certified Trainer role ID |
 | `FRESHWAY_ROLE_STAFF` | ❌ | Staff role ID (command access) |
 | `FRESHWAY_ROLE_MANAGEMENT` | ❌ | Management role ID (command access) |
+| `FRESHWAY_SITE_URL` | ❌ | Base URL of the FreshWay website. The bot calls it to register "Join as Co-Host" / "Join as Helper" button clicks (`POST /api/training/discord-signup`, shared `BOT_API_SECRET`). |
 
 ## HTTP API
 
@@ -75,6 +76,9 @@ request must send the `x-bot-secret` header matching `BOT_API_SECRET`.
 - **Presence** refreshes every 30 minutes with live metrics from Supabase.
 - **Session reminders** (DM to hosts of sessions starting within an hour) run
   every 15 minutes.
+- **Timetable** auto-updates every 30 minutes: the last bot-posted timetable
+  message in the timetable channel is edited in place (or a new one is posted
+  if none exists), so the schedule stays current without spamming the channel.
 
 ## Slash commands
 
@@ -82,6 +86,12 @@ request must send the `x-bot-secret` header matching `BOT_API_SECRET`.
 - `/announce <title> <description> [channel]` - post a FreshWay embed (Trainer/Staff/Management)
 - `/punish <user> <type> <reason>` - issue a punishment (Trainer/Staff/Management)
 - `/timetable` - post the training schedule to the timetable channel as an embed with a **Refresh** button (and a **View on Portal** link when `FRESHWAY_PORTAL_URL` is set). With no sessions it just says no sessions are scheduled.
+
+Session announcements posted to the trainings channel include **Join as
+Co-Host** / **Join as Helper** buttons. Clicking one sends the Discord user id,
+session id and role to the website's `/api/training/discord-signup` endpoint,
+which converts the Discord id into a profile (Roblox name + staff status) and
+registers the signup.
 
 Slash commands are **synced automatically on every start** (guild-scoped when
 `GUILD_ID` is set), so there's no need to run `npm run deploy-commands` after

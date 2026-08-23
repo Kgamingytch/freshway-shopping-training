@@ -149,6 +149,57 @@ async function updateTimetableMessage(client, message) {
   }
 }
 
+/**
+ * Auto-update the timetable: edits the last bot-posted timetable message in
+ * the channel if one exists, otherwise posts a fresh one. Used by the
+ * scheduler so the schedule stays current without spamming the channel.
+ */
+async function autoUpdateTimetable(client) {
+  const id = config.channels.timetable();
+  if (!id) {
+    return { ok: false, count: 0, error: "Timetable channel not configured" };
+  }
+
+  const channel = await client.channels.fetch(id).catch(() => null);
+  if (!channel || !channel.isTextBased()) {
+    return { ok: false, count: 0, error: "Timetable channel not found" };
+  }
+
+  try {
+    const sessions = await fetchUpcomingSessions();
+
+    // Find the most recent bot message that carries the timetable buttons.
+    const messages = await channel.messages.fetch({ limit: 20 }).catch(() => null);
+    const existing = messages
+      ? [...messages.values()].find(
+          (m) =>
+            m.author?.id === client.user.id &&
+            m.components?.some((row) =>
+              row.components?.some((b) => b.customId === TIMETABLE_REFRESH_ID),
+            ),
+        )
+      : null;
+
+    if (existing) {
+      await existing.edit({
+        embeds: [buildTimetableEmbed(sessions)],
+        components: [buildTimetableRow()],
+      });
+      console.log(`[Timetable] Auto-updated message in ${id} (${sessions.length} sessions)`);
+    } else {
+      await channel.send({
+        embeds: [buildTimetableEmbed(sessions)],
+        components: [buildTimetableRow()],
+      });
+      console.log(`[Timetable] Auto-posted to ${id} (${sessions.length} sessions)`);
+    }
+    return { ok: true, count: sessions.length };
+  } catch (e) {
+    console.error("[Timetable] Auto-update failed:", e);
+    return { ok: false, count: 0, error: "Failed to auto-update" };
+  }
+}
+
 module.exports = {
   TIMETABLE_REFRESH_ID,
   fetchUpcomingSessions,
@@ -156,4 +207,5 @@ module.exports = {
   buildTimetableRow,
   postTimetable,
   updateTimetableMessage,
+  autoUpdateTimetable,
 };
