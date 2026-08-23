@@ -5,6 +5,7 @@ const {
   VERIFY_BUTTON_ID,
   VERIFY_ACCEPT_PREFIX,
   VERIFY_FAIL_PREFIX,
+  VERIFY_MODAL_ID,
   handleVerifyButton,
   handleVerificationModal,
   handleVerificationDecision,

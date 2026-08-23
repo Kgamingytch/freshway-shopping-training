@@ -358,6 +358,7 @@ module.exports = {
   VERIFY_BUTTON_ID,
   VERIFY_ACCEPT_PREFIX,
   VERIFY_FAIL_PREFIX,
+  VERIFY_MODAL_ID,
   welcomeDescription,
   ensureVerification,
   handleVerifyButton,
