@@ -127,14 +127,6 @@ function buildVerificationModal() {
         .setStyle(TextInputStyle.Short)
         .setRequired(true),
     ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder()
-        .setCustomId("v_proof")
-        .setLabel("4. Proof of invitation (image link)")
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setPlaceholder("Paste an image link or type 'none'"),
-    ),
   );
   return modal;
 }
@@ -164,20 +156,38 @@ async function hasPendingSubmission(client, userId) {
   }
 }
 
-/** Collect a proof image/link from the user's DMs (10 minute window). */
-async function collectProofInDm(interaction) {
-  const dm = await interaction.user.createDM().catch(() => null);
-  if (!dm) return null;
-  await dm
-    .send({
+/**
+ * Collect a proof image/link from the user's DMs (10 minute window).
+ * Returns the attachment URL or null if nothing was sent.
+ */
+async function collectProofInDm(client, userId) {
+  console.log(`[Verify] Sending DM proof request to ${userId}`);
+  const dm = await client.users.fetch(String(userId)).then((u) => u.createDM()).catch((e) => {
+    console.error(`[Verify] Could not open DM channel for ${userId}:`, e);
+    return null;
+  });
+  if (!dm) {
+    console.warn(`[Verify] DM channel unavailable for ${userId}`);
+    return null;
+  }
+  try {
+    await dm.send({
       embeds: [
         buildEmbed({
           title: "Proof of Invitation",
-          description: "> Please send a screenshot of your invitation here.\n> You have **10 minutes** to attach it.",
+          description: [
+            "> Please **send a screenshot** of your invitation here.",
+            "> You have **10 minutes** to send it.",
+            "> If you do not send proof, your request will still be reviewed.",
+          ].join("\n"),
         }),
       ],
-    })
-    .catch(() => {});
+    });
+    console.log(`[Verify] DM proof request sent to ${userId}`);
+  } catch (e) {
+    console.error(`[Verify] Failed to send DM to ${userId}:`, e);
+    return null;
+  }
   try {
     const collected = await dm.awaitMessages({
       max: 1,
@@ -185,11 +195,24 @@ async function collectProofInDm(interaction) {
       errors: ["time"],
     });
     const msg = collected.first();
-    if (msg?.attachments?.size) return msg.attachments.first().url;
+    console.log(`[Verify] Received DM from ${userId}: attachments=${msg?.attachments?.size ?? 0}`);
+    // Check for attachment first
+    if (msg?.attachments?.size) {
+      const url = msg.attachments.first().url;
+      console.log(`[Verify] Proof attachment URL: ${url}`);
+      return url;
+    }
+    // Fall back to a link in the message text
     const link = msg?.content?.match(/https?:\/\/\S+/);
-    return link ? link[0] : null;
+    if (link) {
+      console.log(`[Verify] Proof link from text: ${link[0]}`);
+      return link[0];
+    }
+    console.log(`[Verify] No proof found in DM from ${userId}`);
+    return null;
   } catch {
-    return null; // timed out - proceed without proof
+    console.log(`[Verify] DM proof collection timed out for ${userId}`);
+    return null;
   }
 }
 
@@ -199,8 +222,6 @@ async function handleVerificationModal(interaction) {
   const name = interaction.fields.getTextInputValue("v_name").trim();
   const invite = interaction.fields.getTextInputValue("v_invite").trim();
   const rank = interaction.fields.getTextInputValue("v_rank").trim();
-  const proofInput = interaction.fields.getTextInputValue("v_proof").trim();
-
   const userId = interaction.user.id;
 
   // No duplicate submissions while one is under review.
@@ -213,20 +234,15 @@ async function handleVerificationModal(interaction) {
   }
   pendingUsers.set(userId, true);
 
-  await sendDiscordDm(interaction.client, userId, {
-    title: "Verification Received",
-    description: [
-      "> Your verification form has been received.",
-      "> Our Training Leadership will review it within **12-24 hours**.",
-      "> Please be patient while it is processed.",
-    ].join("\n"),
+  // Tell the user we received their form and ask for proof via DM.
+  await interaction.editReply({
+    content: "Form received! **Please check your DMs** to send proof of invitation."
   });
 
-  // If they did not paste a proof link, give them 10 minutes to attach one.
-  let proof = proofInput && proofInput.toLowerCase() !== "none" ? proofInput : null;
-  if (!proof) {
-    proof = await collectProofInDm(interaction);
-  }
+  // Collect proof via DM (10 minute window).
+  console.log(`[Verify] Collecting proof from ${userId} via DM...`);
+  let proof = await collectProofInDm(interaction.client, userId);
+  console.log(`[Verify] Proof result for ${userId}: ${proof || "none"}`);
 
   const reviewChannelId = config.channels.verificationReviews();
   if (!reviewChannelId) {
@@ -260,7 +276,7 @@ async function handleVerificationModal(interaction) {
   console.log(`[Verify] Submission from ${userId} posted to ${reviewChannelId}`);
 
   await interaction.editReply({
-    content: "Form received! You will be notified once our Training Leadership reviews it (**12-24 hours**).",
+    content: "All done! Your verification request has been submitted. Training Leadership will review it within **12-24 hours**.",
   });
 }
 
