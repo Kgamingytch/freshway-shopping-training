@@ -42,16 +42,16 @@ const pendingProofs = new Map();
 /** The exact welcome copy from Training Leadership. */
 function welcomeDescription() {
   return [
-    "Welcome dear member! Here in the Training Division there are dedicated people with the number one point of synthesizing and training new staff to reach and show their maximum capabilities. As a trainer here you will have more responsibilities that will be discussed further.",
+    "> <:moderation:1520498323121897634> Welcome dear member! Here in the Training Division there are dedicated people with the number one point of synthesizing and training new staff to reach and show their maximum capabilities. As a trainer here you will have more responsibilities that will be discussed further.",
     "",
-    "> Therefore, to continue to our verification please click the button below \"Verify & Authorization\" and continue with what is said in the form. If you are and have been invited please add the proof so that the security rate is maximum and to ensure that your request will be accepted.",
+    "> <:arrow:1529399913194979458> Therefore, to continue to our verification please click the button below \"Verify & Authorization\" and continue with what is said in the form. If you are and have been invited please add the proof so that the security rate is maximum and to ensure that your request will be accepted.",
     "",
-    "If you are a Directory Member please put the rank \"Directory\" if you are or invited and have passed our application/interview or have been handpicked please choose the rank \"Trainer\". Once you have submitted our Training Leadership will be pinged as quickly as possible for this request to be accepted. Thank you once again for choosing FreshWay!  <:vacancies:1525786469342511135>",
+    "> <:arrow:1529399913194979458> If you are a Directory Member please put the rank \"Directory\" if you are or invited and have passed our application/interview or have been handpicked please choose the rank \"Trainer\". Once you have submitted our Training Leadership will be pinged as quickly as possible for this request to be accepted. Thank you once again for choosing FreshWay!",
   ].join("\n");
 }
 
 function buildWelcomeEmbed() {
-  return buildEmbed({ title: "FreshWay | Training Division", description: welcomeDescription() });
+  return buildEmbed({ title: "", description: welcomeDescription() });
 }
 
 function buildWelcomeRow() {
@@ -59,7 +59,8 @@ function buildWelcomeRow() {
     new ButtonBuilder()
       .setCustomId(VERIFY_BUTTON_ID)
       .setLabel("Verify & Authorization")
-      .setStyle(ButtonStyle.Primary),
+      .setStyle(ButtonStyle.Primary)
+      .setEmoji(1526129915575930982),
   );
 }
 
