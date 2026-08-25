@@ -19,7 +19,7 @@ const {
 const { getSupabase } = require("./supabase");
 const { notifySessionCreated } = require("./notifications");
 
-const SESSION_TYPES = ["Training", "Store Shift", "Promotional Shift", "Community Event"];
+const SESSION_TYPES = ["Store Colleague Training","Security Guard Training"];
 
 const BOOKING_SELECT_ID = "booking_type_select";
 const BOOKING_CANCEL_ID = "booking_cancel";
