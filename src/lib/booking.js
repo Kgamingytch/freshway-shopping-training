@@ -45,7 +45,7 @@ function buildBookingRows() {
 function buildBookingModal(sessionType) {
   const modal = new ModalBuilder()
     .setCustomId(`${BOOKING_MODAL_ID}:${sessionType}`)
-    .setTitle(`Book ${sessionType}`);
+    .setTitle(`Book a ${sessionType}`);
 
   const title = new TextInputBuilder()
     .setCustomId("b_title")
