@@ -59,7 +59,7 @@ function buildWelcomeRow() {
     new ButtonBuilder()
       .setCustomId(VERIFY_BUTTON_ID)
       .setLabel("Verify & Authorization")
-      .setStyle(ButtonStyle.Primary)
+      .setStyle(ButtonStyle.Secondary)
       .setEmoji({ id: "1526129915575930982" }),  // ✅ Object with id
   );
 }
