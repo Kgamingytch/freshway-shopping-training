@@ -101,7 +101,9 @@ async function ensureVerification(client) {
   }
 }
 
-// ---------- Application form ----------
+async function handleVerifyButton(interaction) {
+  await interaction.showModal(buildVerificationModal());
+}
 
 function buildVerificationModal() {
   const modal = new ModalBuilder().setCustomId(VERIFY_MODAL_ID).setTitle("FreshWay Verification");
@@ -131,10 +133,6 @@ function buildVerificationModal() {
   return modal;
 }
 
-async function handleVerifyButton(interaction) {
-  await interaction.showModal(buildVerificationModal());
-}
-
 /** True when the user already has a pending (undecided) submission. */
 async function hasPendingSubmission(client, userId) {
   const channelId = config.channels.verificationReviews();
@@ -155,7 +153,6 @@ async function hasPendingSubmission(client, userId) {
     return false;
   }
 }
-
 /**
  * Handle a DM message from a user who is waiting to provide proof.
  * Called from the global messageCreate listener in index.js.
