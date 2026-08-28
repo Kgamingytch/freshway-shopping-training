@@ -145,13 +145,22 @@ async function handleBookingModal(interaction) {
 
   // Host defaults to the user who booked it.
   let hostUserId = null;
+  let hostName = "";
   try {
     const { data: profile } = await sb
       .from("profiles")
-      .select("id")
+      .select("id, discord_username")
       .eq("discord_id", interaction.user.id)
       .maybeSingle();
     hostUserId = profile?.id ?? null;
+    if (hostUserId) {
+      const { data: roblox } = await sb
+        .from("roblox_accounts")
+        .select("roblox_username")
+        .eq("user_id", hostUserId)
+        .maybeSingle();
+      hostName = roblox?.roblox_username ?? profile?.discord_username ?? "";
+    }
   } catch (e) {
     console.error("[Booking] Failed to resolve host profile:", e?.message ?? e);
   }
@@ -185,6 +194,22 @@ async function handleBookingModal(interaction) {
     return interaction.editReply({
       content: `Failed to create the session: ${error?.message ?? "unknown error"}`,
     });
+  }
+
+  // Sync to the Trello board (best effort, same as the website) so the
+  // session is scheduled on Trello, not just in Supabase.
+  try {
+    const { createSessionCard } = require("./trello");
+    await createSessionCard({
+      sessionId: session.id,
+      title,
+      hostName,
+      gameLink: gameLink || null,
+      description: description || null,
+      scheduledAt,
+    });
+  } catch (e) {
+    console.error("[Booking] Trello sync failed:", e?.message ?? e);
   }
 
   await notifySessionCreated(interaction.client, session.id);
