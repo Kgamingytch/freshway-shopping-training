@@ -4,8 +4,8 @@ const { canManage } = require("../lib/guards");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("training-booking")
-    .setDescription("Book a training session or shift (same system as the portal)"),
+    .setName("book")
+    .setDescription("Book a training session"),
 
   async execute(interaction) {
     if (!canManage(interaction)) {
