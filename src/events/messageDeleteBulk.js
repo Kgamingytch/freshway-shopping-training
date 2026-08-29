@@ -8,7 +8,9 @@ module.exports = {
   async execute(messages, channel) {
     try {
       const logId = config.channels.messageLogs();
-      if (!logId) return;
+      const guildId = process.env.GUILD_ID?.trim();
+      if (!logId || !guildId) return;
+      if (channel?.guild?.id !== guildId) return;
       if (channel?.id === logId) return; // avoid loops
 
       const channelName = channel?.name ? `#${channel.name}` : `<#${channel?.id ?? "unknown"}>`;

@@ -10,7 +10,9 @@ module.exports = {
   async execute(message) {
     try {
       const logId = config.channels.messageLogs();
-      if (!logId) return;
+      const guildId = process.env.GUILD_ID?.trim();
+      if (!logId || !guildId) return;
+      if (message.guildId !== guildId) return;
       if (message.channelId === logId) return; // avoid loops
       if (message.channel?.isDMBased?.()) return;
 

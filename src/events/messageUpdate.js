@@ -15,7 +15,9 @@ module.exports = {
   async execute(oldMessage, newMessage) {
     try {
       const logId = config.channels.messageLogs();
-      if (!logId) return;
+      const guildId = process.env.GUILD_ID?.trim();
+      if (!logId || !guildId) return;
+      if (oldMessage.guildId !== guildId || newMessage.guildId !== guildId) return;
       if (oldMessage.channelId === logId || newMessage.channelId === logId) return; // avoid loops
       if (oldMessage.author?.bot || newMessage.author?.bot) return;
       if (newMessage.channel?.isDMBased?.()) return;
