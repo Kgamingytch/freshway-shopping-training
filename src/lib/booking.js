@@ -196,20 +196,32 @@ async function handleBookingModal(interaction) {
     });
   }
 
-  // Sync to the Trello board (best effort, same as the website) so the
-  // session is scheduled on Trello, not just in Supabase.
+  // Ask the website to sync the new session to Trello. Trello credentials stay
+  // on the website and are never stored on or required by the bot.
   try {
-    const { createSessionCard } = require("./trello");
-    await createSessionCard({
-      sessionId: session.id,
-      title,
-      hostName,
-      gameLink: gameLink || null,
-      description: description || null,
-      scheduledAt,
-    });
+    const base = process.env.FRESHWAY_SITE_URL?.trim().replace(/\/+$/, "");
+    const secret = process.env.FRESHWAY_BOT_API_SECRET?.trim();
+    if (!base || !secret) {
+      console.warn("[Booking] FRESHWAY_SITE_URL / FRESHWAY_BOT_API_SECRET not set - skipping website Trello sync");
+    } else {
+      const trelloResponse = await fetch(`${base}/api/training/trello-sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-bot-secret": secret },
+        body: JSON.stringify({
+          sessionId: session.id,
+          title,
+          hostName,
+          gameLink: gameLink || null,
+          description: description || null,
+          scheduledAt,
+        }),
+      });
+      if (!trelloResponse.ok) {
+        console.error(`[Booking] Website Trello sync returned HTTP ${trelloResponse.status}`);
+      }
+    }
   } catch (e) {
-    console.error("[Booking] Trello sync failed:", e?.message ?? e);
+    console.error("[Booking] Website Trello sync failed:", e?.message ?? e);
   }
 
   await notifySessionCreated(interaction.client, session.id);
