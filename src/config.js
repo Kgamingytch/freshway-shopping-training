@@ -46,6 +46,7 @@ module.exports = {
     verificationReviews: () => process.env.FRESHWAY_CHANNEL_VERIFICATION_REVIEWS?.trim() || "1525794994932154449",
     voting: () => process.env.FRESHWAY_CHANNEL_VOTING?.trim() || "1525791566919110736",
     messageLogs: () => process.env.FRESHWAY_CHANNEL_MESSAGE_LOGS?.trim() || "1525794474846982275",
+    publicBoard: () => process.env.FRESHWAY_CHANNEL_PUBLIC_BOARD?.trim() || "1520453406781734942",
   },
 
   // Role IDs

@@ -16,6 +16,7 @@ const {
   sendTrainingChannelEmbed,
 } = require("./channels");
 const boards = require("./boards");
+const publicBoard = require("./public-board");
 const config = require("../config");
 
 // ---------- Helpers ----------
@@ -52,10 +53,37 @@ function capitalise(s) {
 async function notifySessionCreated(client, sessionId) {
   try {
     if (!sessionId) return;
+    const sb = getSupabase();
+    let created = null;
+    if (sb) {
+      const { data } = await sb
+        .from("training_sessions")
+        .select("title, scheduled_at, status")
+        .eq("id", sessionId)
+        .maybeSingle();
+      created = data;
+    }
+
     await Promise.all([
       boards.updateTrainingsBoard(client).catch(() => {}),
       boards.updateTimetableBoard(client).catch(() => {}),
+      publicBoard.updatePublicBoard(client).catch(() => {}),
     ]);
+
+    if (created) {
+      await publicBoard.notifySubscribers(client, {
+        title: `New Training Session: ${created.title}`,
+        description: [
+          `> A new training session **${created.title}** has been added.`,
+          `> **When:** ${unixTimestamp(created.scheduled_at)}`,
+          created.status ? `> **Status:** ${capitalise(created.status)}` : "",
+          "",
+          "> Check the Training Board channel for the full details.",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      });
+    }
   } catch (e) {
     console.error("[Notify] Failed to refresh boards after session created:", e);
   }
@@ -86,7 +114,17 @@ async function notifySessionStatusChanged(client, sessionId, oldStatus, newStatu
     await Promise.all([
       boards.updateTrainingsBoard(client).catch(() => {}),
       boards.updateTimetableBoard(client).catch(() => {}),
+      publicBoard.updatePublicBoard(client).catch(() => {}),
     ]);
+
+    await publicBoard.notifySubscribers(client, {
+      title: `Training Update: ${session.title}`,
+      description: [
+        `> The session **${session.title}** changed status.`,
+        `> **${capitalise(oldStatus)}** → **${capitalise(newStatus)}**`,
+        `> **Scheduled:** ${unixTimestamp(session.scheduled_at)}`,
+      ].join("\n"),
+    });
   } catch (e) {
     console.error("[Notify] Failed to notify status change:", e);
   }
@@ -102,7 +140,16 @@ async function notifySessionDeleted(client, sessionId, title, deletedBy) {
   await Promise.all([
     boards.updateTrainingsBoard(client).catch(() => {}),
     boards.updateTimetableBoard(client).catch(() => {}),
+    publicBoard.updatePublicBoard(client).catch(() => {}),
   ]);
+
+  await publicBoard.notifySubscribers(client, {
+    title: `Training Cancelled: ${title}`,
+    description: [
+      `> The session **${title}** has been removed from the schedule.`,
+      `> **Deleted by:** ${deletedBy}`,
+    ].join("\n"),
+  });
 }
 
 // ---------- Certification notifications ----------

@@ -37,6 +37,12 @@ const {
   handleVotingButton,
   handleVoteButton,
 } = require("../lib/voting");
+const {
+  SUBSCRIBE_ID,
+  UNSUBSCRIBE_PREFIX,
+  handleSubscribeButton,
+  handleUnsubscribeButton,
+} = require("../lib/public-board");
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -87,6 +93,10 @@ module.exports = {
         await handleVoteButton(interaction);
       } else if (id === BOOKING_CANCEL_ID) {
         await handleBookingCancel(interaction);
+      } else if (id === SUBSCRIBE_ID) {
+        await handleSubscribeButton(interaction);
+      } else if (id === UNSUBSCRIBE_PREFIX) {
+        await handleUnsubscribeButton(interaction);
       }
       return;
     }

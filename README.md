@@ -49,6 +49,7 @@ npm run dev
 | `FRESHWAY_CHANNEL_VERIFICATION_REVIEWS` | ❌ | Verification review channel (defaults to `1525794994932154449`) |
 | `FRESHWAY_CHANNEL_VOTING` | ❌ | Staff-case voting channel (defaults to `1525791566919110736`) |
 | `FRESHWAY_CHANNEL_MESSAGE_LOGS` | ❌ | Edited/deleted message log channel (defaults to `1525794474846982275`) |
+| `FRESHWAY_CHANNEL_PUBLIC_BOARD` | ❌ | Public Training Board channel with a Subscribe button for DM updates (defaults to `1520453406781734942`) |
 | `FRESHWAY_ROLE_TRAINER` | ✅ | Certified Trainer role ID |
 | `FRESHWAY_ROLE_STAFF` | ❌ | Staff role ID (command access) |
 | `FRESHWAY_ROLE_MANAGEMENT` | ❌ | Management role ID (command access) |
@@ -100,6 +101,15 @@ message when the content actually changed, so nothing is spammed.
 
 Session lifecycle notices (status changes, deletions) are logged to the
 **logs** channel, not the trainings channel.
+
+- **Public Training Board** - a read-only board in its own channel that
+  everyone can see: the "Training Board" header embed (with the training
+  emoji) and the **Subscribe to training's** button under it, then one
+  embed per session (host, time, status, game, Co-Hosts, Helpers, no
+  buttons). Subscribers get a DM whenever a session is added, changes
+  status (pending / scheduled / ongoing / completed / cancelled), or is
+  removed. Subscriptions persist across restarts (`data/public-board.json`).
+  Refreshed every 20 seconds together with the other boards.
 
 ## Scheduled tasks
 
