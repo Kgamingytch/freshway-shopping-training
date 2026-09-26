@@ -31,6 +31,7 @@ const config = require("../config");
 const E = require("./emojis");
 
 const PANEL_CHANNEL_FALLBACK = "1525794663707971725";
+const ERROR_PING_USER = "1189124850913116212"; // Kgamingytch
 
 const POWER_PREFIX = "fw_power:"; // + signal (start|restart|kill)
 
@@ -90,8 +91,7 @@ function flushWriteBuf() {
 }
 
 function formatLine(line) {
-  const mark = line.level === "err" ? E.cross : line.level === "warn" ? E.warning : E.check;
-  return `\`${line.t}\` ${mark} ${line.text}`;
+  return `[${line.t}] ${line.text}`;
 }
 
 /** Tail the on-disk log file into the ring on boot. */
@@ -101,10 +101,10 @@ function loadTailFromDisk() {
     const raw = fs.readFileSync(LOG_FILE, "utf8");
     const lines = raw.trimEnd().split("\n").slice(-RING_SIZE);
     for (const l of lines) {
-      // Stored format: "MM-DD HH:MM:SS emoji text" - keep it as-is.
-      const text = l.slice(20).replace(/^(<:\w+:\d+> )?/, "");
-      const level = l.includes(`${E.cross} `) ? "err" : l.includes(`${E.warning} `) ? "warn" : "info";
-      ring.push({ t: l.slice(0, 11), level, text: text.slice(0, 300) });
+      // Stored format: "[MM-DD HH:MM:SS] text" - keep it as-is.
+      const text = l.slice(20);
+      const level = l.slice(20).startsWith("[ERROR]") || l.slice(20).startsWith("[FATAL]") ? "err" : "info";
+      ring.push({ t: l.slice(1, 12), level, text: text.slice(0, 300) });
     }
   } catch {
     /* best effort */
@@ -112,6 +112,39 @@ function loadTailFromDisk() {
 }
 
 let teeInstalled = false;
+
+// Error alerting: error lines are queued and posted as a separate pinging
+// message that self-destructs after a minute.
+const ERROR_ALERT_OWNER = process.env.OWNER_ID?.trim() || ERROR_PING_USER;
+const ERROR_ALERT_LIFETIME_MS = 60000;
+const errorQueue = [];
+let errorAlertInFlight = false;
+
+function queueErrorAlert(line) {
+  if (!ERROR_ALERT_OWNER) return;
+  // Never alert on the console panel's own internal errors (avoid loops).
+  if (line.text.includes("[ConsolePanel]")) return;
+  if (errorQueue.length < 10) errorQueue.push(line);
+}
+
+/** Post queued errors as a pinging message that auto-deletes after 1 min. */
+async function flushErrorAlerts(channel) {
+  if (errorQueue.length === 0 || errorAlertInFlight) return;
+  errorAlertInFlight = true;
+  const batch = errorQueue.splice(0, errorQueue.length);
+  try {
+    const text = batch.map(formatLine).join("\n").slice(0, 1800);
+    const msg = await channel.send({
+      content: `<@${ERROR_ALERT_OWNER}> **Error detected** (this message self-deletes in 1 minute):\n\`\`\`${text}\`\`\``,
+    });
+    setTimeout(() => msg.delete().catch(() => {}), ERROR_ALERT_LIFETIME_MS);
+  } catch (e) {
+    console.error("[ConsolePanel] error alert failed:", e?.message ?? e);
+  } finally {
+    errorAlertInFlight = false;
+  }
+}
+
 /** Install the console tee exactly once. */
 function installTee() {
   if (teeInstalled) return;
@@ -127,7 +160,8 @@ function installTee() {
           .map((a) => (typeof a === "string" ? a : require("node:util").inspect(a, { depth: 1 })))
           .join(" ");
         const line = recordLine(level, text);
-        writeBuf.push(`${line.t} ${formatLine(line)}`);
+        writeBuf.push(formatLine(line));
+        if (level === "err") queueErrorAlert(line);
       } catch {
         /* never throw from logging */
       }
@@ -215,19 +249,13 @@ function powerButtons(currentState) {
       .setCustomId(POWER_PREFIX + "restart")
       .setLabel("Restart")
       .setEmoji(E.parse(E.schedule))
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId(POWER_PREFIX + "kill")
-      .setLabel("Kill")
-      .setEmoji(E.parse(E.cross))
-      .setStyle(ButtonStyle.Danger)
+      .setStyle(ButtonStyle.Primary)
       .setDisabled(!running),
     new ButtonBuilder()
-      .setCustomId(POWER_PREFIX + "start")
-      .setLabel("Start")
-      .setEmoji(E.parse(E.check))
-      .setStyle(ButtonStyle.Success)
-      .setDisabled(running),
+      .setCustomId(POWER_PREFIX + "shutdown")
+      .setLabel("Shutdown")
+      .setEmoji(E.parse(E.warning))
+      .setStyle(ButtonStyle.Danger),
   );
 }
 
@@ -238,19 +266,19 @@ function buildLogText(extraLines = []) {
   let lines = all.map(formatLine);
   // Trim from the top until we fit the character budget.
   while (lines.length > 1 && lines.join("\n").length > MAX_LOG_CHARS) lines = lines.slice(1);
-  return lines.join("\n") || "_No log output yet._";
+  return lines.join("\n") || "No log output yet.";
 }
 
 function buildPanelComponents({ state, footer, extraLines = [] }) {
   const header = new ContainerBuilder().setAccentColor(BRAND_GREEN);
   header.addTextDisplayComponents((t) =>
-    t.setContent(`## ${E.roblox} FreshWay Bot Console`),
+    t.setContent(`## FreshWay Bot Console`),
   );
   header.addTextDisplayComponents((t) =>
     t.setContent(
       [
-        `${E.connected} **Panel state:** \`${state ?? "unknown"}\``,
-        `${E.time} **Updated:** <t:${Math.floor(Date.now() / 1000)}:R>`,
+        `**Panel state:** \`${state ?? "unknown"}\``,
+        `**Updated:** <t:${Math.floor(Date.now() / 1000)}:R>`,
         footer ? `-# ${footer}` : "-# Logs stream live; use the buttons below for power actions.",
       ].join("\n"),
     ),
@@ -259,8 +287,9 @@ function buildPanelComponents({ state, footer, extraLines = [] }) {
   const components = [header, new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small)];
 
   const logs = new ContainerBuilder().setAccentColor(0x66756a);
+  const logBlock = `\u0060\u0060\u0060\n${buildLogText(extraLines)}\n\u0060\u0060\u0060`;
   logs.addTextDisplayComponents((t) =>
-    t.setContent(`### ${E.history} Live Log Tail\n${buildLogText(extraLines)}`),
+    t.setContent(`### Live Log Tail\n${logBlock}`),
   );
   components.push(logs);
   return components;
@@ -280,6 +309,9 @@ async function updateConsolePanel(client, { footer, extraLines } = {}) {
     process.env.FRESHWAY_CHANNEL_CONSOLE?.trim() || PANEL_CHANNEL_FALLBACK;
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel || !channel.isTextBased()) return null;
+
+  // Post any queued error alerts (ping + auto-delete) in the same channel.
+  await flushErrorAlerts(channel).catch(() => {});
 
   const state = loadState();
   const isV2Panel = (m) =>
@@ -362,6 +394,44 @@ function startConsolePanel(client) {
   }
 }
 
+/** Wait until the panel reports a state other than `running` (or timeout). */
+async function waitUntilNotRunning(maxMs = 30000) {
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    const state = await fetchPowerState();
+    if (state && state !== "running") return state;
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  return null;
+}
+
+// ---------- Custom shutdown ----------
+
+/**
+ * Graceful shutdown: flip the bot's presence to Do Not Disturb (so it looks
+ * offline to users even if Discord is slow to drop the gateway session),
+ * then exit. The container stops when the node process ends.
+ */
+async function gracefulShutdown(client, reason = "manual shutdown") {
+  console.log(`[ConsolePanel] Shutting down (${reason}) - setting DND presence...`);
+  try {
+    client.user.setPresence({
+      status: "dnd",
+      activities: [{ name: "offline - bot shut down", type: 4, state: "offline" }],
+    });
+  } catch {
+    /* best effort */
+  }
+  // Give Discord a moment to propagate the presence change.
+  await new Promise((r) => setTimeout(r, 2500));
+  try {
+    client.destroy();
+  } catch {
+    /* best effort */
+  }
+  process.exit(0);
+}
+
 // ---------- Power button handler ----------
 
 /** Handle a fw_power:<signal> button. Returns true if handled. */
@@ -370,30 +440,42 @@ async function handleConsolePowerButton(interaction) {
   if (!id.startsWith(POWER_PREFIX)) return false;
   const signal = id.slice(POWER_PREFIX.length);
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-  if (signal === "restart") {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });  if (signal === "restart") {
     await interaction.editReply({
-      content: `${E.schedule} Restarting: sending restart signal, then kill in ${RESTART_KILL_DELAY_MS / 1000}s (panel quirk)...`,
+      content: `Restarting: sending restart signal, then waiting for the container to enter "stopping"...`,
     });
     const first = await sendPowerSignal("restart");
     if (!first.ok) {
-      await interaction.editReply({ content: `${E.cross} Restart signal failed: ${first.error}` });
+      await interaction.editReply({ content: `Restart signal failed: ${first.error}` });
       return true;
     }
-    await new Promise((r) => setTimeout(r, RESTART_KILL_DELAY_MS));
-    await sendPowerSignal("kill"); // panel hangs in "stopping" without this
+    // The panel hangs in "stopping" forever - wait for that state, then kill.
+    await waitUntilNotRunning(30000);
+    await sendPowerSignal("kill");
+    // Kill can also stall; send a second kill after a short delay to be sure.
+    await new Promise((r) => setTimeout(r, 8000));
+    const state = await fetchPowerState();
+    if (state === "stopping") await sendPowerSignal("kill");
     await interaction.editReply({
-      content: `${E.check} Restart issued (restart + kill sent). The container's start script boots the bot again - expect a few minutes while it pulls code and installs.`,
+      content: `Restart issued (restart + kill sent). The container's start script boots the bot again - expect a few minutes while it pulls code and installs.`,
     });
+    return true;
+  }
+
+  if (signal === "shutdown") {
+    await interaction.editReply({
+      content: `Shutting down: setting status to Do Not Disturb / offline, then stopping the process. Start it again from the Pterodactyl panel.`,
+    });
+    await updateConsolePanel(interaction.client, { footer: "Bot shut down manually from Discord" }).catch(() => {});
+    await gracefulShutdown(interaction.client);
     return true;
   }
 
   const res = await sendPowerSignal(signal);
   if (res.ok) {
-    await interaction.editReply({ content: `${E.check} Power signal \`${signal}\` sent to the panel.` });
+    await interaction.editReply({ content: `Power signal \`${signal}\` sent to the panel.` });
   } else {
-    await interaction.editReply({ content: `${E.cross} \`${signal}\` failed: ${res.error}` });
+    await interaction.editReply({ content: `\`${signal}\` failed: ${res.error}` });
   }
   return true;
 }
