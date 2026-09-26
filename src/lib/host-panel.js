@@ -161,7 +161,7 @@ async function afterChange(client, sessionId, extra) {
 async function handleHostStatus(interaction, sessionId) {
   const newStatus = interaction.values?.[0];
   const sb = getSupabase();
-  if (!sb) return interaction.reply({ content: `${E.cross} Database unavailable.`, flags: MessageFlags.Ephemeral });
+  if (!sb) return interaction.editReply({ content: `${E.cross} Database unavailable.`, components: [] });
 
   const { data: session } = await sb
     .from("training_sessions")
@@ -169,7 +169,7 @@ async function handleHostStatus(interaction, sessionId) {
     .eq("id", sessionId)
     .maybeSingle();
   if (!session) {
-    return interaction.reply({ content: `${E.cross} That session no longer exists.`, flags: MessageFlags.Ephemeral });
+    return interaction.editReply({ content: `${E.cross} That session no longer exists.`, components: [] });
   }
 
   const { error } = await sb
@@ -178,17 +178,18 @@ async function handleHostStatus(interaction, sessionId) {
     .eq("id", sessionId);
   if (error) {
     console.error("[HostPanel] status update failed:", error.message);
-    return interaction.reply({ content: `${E.cross} Failed to update status.`, flags: MessageFlags.Ephemeral });
+    return interaction.editReply({ content: `${E.cross} Failed to update status.`, components: [] });
   }
 
+  await interaction.editReply({
+    content: `${E.check} Status updated to **${newStatus}** for **${session.title}**.`,
+    components: [],
+  });
+  // Board refresh + subscriber DMs happen AFTER the user gets a reply.
   await afterChange(interaction.client, sessionId, {
     notify: true,
     oldStatus: session.status,
     newStatus,
-  });
-  await interaction.reply({
-    content: `${E.check} Status updated to **${newStatus}** for **${session.title}**.`,
-    flags: MessageFlags.Ephemeral,
   });
   return true;
 }
@@ -288,7 +289,7 @@ async function handleHostTypeModal(interaction, sessionId) {
 /** "Cancel Session" button. */
 async function handleHostCancel(interaction, sessionId) {
   const sb = getSupabase();
-  if (!sb) return interaction.reply({ content: `${E.cross} Database unavailable.`, flags: MessageFlags.Ephemeral });
+  if (!sb) return interaction.editReply({ content: `${E.cross} Database unavailable.`, components: [] });
 
   const { data: session } = await sb
     .from("training_sessions")
@@ -296,14 +297,19 @@ async function handleHostCancel(interaction, sessionId) {
     .eq("id", sessionId)
     .maybeSingle();
   if (!session) {
-    return interaction.reply({ content: `${E.cross} That session no longer exists.`, flags: MessageFlags.Ephemeral });
+    return interaction.editReply({ content: `${E.cross} That session no longer exists.`, components: [] });
   }
 
   const { error } = await sb.from("training_sessions").delete().eq("id", sessionId);
   if (error) {
     console.error("[HostPanel] cancel failed:", error.message);
-    return interaction.reply({ content: `${E.cross} Failed to cancel the session.`, flags: MessageFlags.Ephemeral });
+    return interaction.editReply({ content: `${E.cross} Failed to cancel the session.`, components: [] });
   }
+
+  await interaction.editReply({
+    content: `${E.check} **${session.title}** has been cancelled and removed from all boards.`,
+    components: [],
+  });
 
   await Promise.all([
     boards.updateTrainingsBoard(interaction.client).catch(() => {}),
@@ -316,10 +322,6 @@ async function handleHostCancel(interaction, sessionId) {
     session.title,
     interaction.user.username,
   );
-  await interaction.reply({
-    content: `${E.check} **${session.title}** has been cancelled and removed from all boards.`,
-    flags: MessageFlags.Ephemeral,
-  });
   return true;
 }
 
@@ -340,6 +342,19 @@ async function handleHostPanelInteraction(interaction) {
     (id.startsWith(HOST_TYPE_MODAL) ? id.slice(HOST_TYPE_MODAL.length) : null);
   if (!sessionId) return false;
 
+  const isModal = interaction.isModalSubmit?.();
+
+  // Acknowledge IMMEDIATELY - Discord kills interactions that are not
+  // acknowledged within 3 seconds. Modal submits that open another modal are
+  // the exception (showModal acknowledges on its own).
+  if (!isModal) {
+    if (id.startsWith(HOST_STATUS_PREFIX) || id.startsWith(HOST_CANCEL_PREFIX)) {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+    } else if (!interaction.replied && !interaction.deferred) {
+      await interaction.deferUpdate().catch(() => {});
+    }
+  }
+
   // Authorisation: only the session's host may use these controls.
   const host = await isSessionHost(sb, sessionId, interaction.user.id);
   if (!host) {
@@ -349,6 +364,10 @@ async function handleHostPanelInteraction(interaction) {
           content: `${E.cross} Only the session host can use these controls.`,
           flags: MessageFlags.Ephemeral,
         })
+        .catch(() => {});
+    } else {
+      await interaction
+        .editReply({ content: `${E.cross} Only the session host can use these controls.`, components: [] })
         .catch(() => {});
     }
     return true;
