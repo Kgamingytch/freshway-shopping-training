@@ -14,7 +14,18 @@
 // Boards only edit their message when the content actually changed
 // (fingerprint comparison), so the 20s scheduler does not spam the API.
 
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ContainerBuilder,
+  MessageFlags,
+  SectionBuilder,
+  SeparatorBuilder,
+  SeparatorSpacingSize,
+  TextDisplayBuilder,
+  ThumbnailBuilder,
+} = require("discord.js");
 const { getSupabase } = require("./supabase");
 const { buildEmbed } = require("./embeds");
 const { buildSessionManageRow, MANAGE_PREFIX } = require("./session-join");
@@ -79,9 +90,48 @@ async function fetchBoardSessions(limit = 10) {
   }));
 }
 
-// ---------- Timetable board ----------
+// ---------- Timetable board (Components V2) ----------
 
-/** Build the timetable embed. With no sessions it simply says so. */
+const TIMETABLE_IMAGE_URL = process.env.FRESHWAY_SHIFT_IMAGE_URL?.trim() || null;
+
+/** Build the timetable as a V2 container. With no sessions it simply says so. */
+function buildTimetableV2(sessions, client) {
+  const container = new ContainerBuilder().setAccentColor(0x1a5632);
+  try {
+    const avatar = client?.user?.displayAvatarURL?.({ size: 128 });
+    if (avatar) {
+      const section = new SectionBuilder().addTextDisplayComponents((t) =>
+        t.setContent("## 🗓️ Training Timetable"),
+      );
+      section.setThumbnailAccessory(new ThumbnailBuilder().setURL(avatar));
+      container.addSectionComponents(section);
+    } else {
+      container.addTextDisplayComponents((t) => t.setContent("## 🗓️ Training Timetable"));
+    }
+  } catch {
+    container.addTextDisplayComponents((t) => t.setContent("## 🗓️ Training Timetable"));
+  }
+
+  if (!sessions.length) {
+    container.addTextDisplayComponents((t) => t.setContent("> **No sessions scheduled.**"));
+    return container;
+  }
+
+  for (const s of sessions) {
+    container.addSeparatorComponents((sep) =>
+      sep.setSpacing(SeparatorSpacingSize.Small).setDivider(true),
+    );
+    const time = s.scheduled_at
+      ? `<t:${Math.floor(new Date(s.scheduled_at).getTime() / 1000)}:F> (<t:${Math.floor(new Date(s.scheduled_at).getTime() / 1000)}:R>)`
+      : "Not scheduled";
+    const lines = [`**${s.title}**`, `👤 Host: ${s.hostName} · 🕐 ${time}`];
+    if (s.roblox_game_link) lines.push(`🔗 [Join Server](${s.roblox_game_link})`);
+    container.addTextDisplayComponents((t) => t.setContent(lines.join("\n")));
+  }
+  return container;
+}
+
+/** Build the timetable embed (legacy shape, still used by /timetable post). */
 function buildTimetableBoardEmbed(sessions) {
   if (!sessions.length) {
     return buildEmbed({
@@ -107,6 +157,14 @@ function buildTimetableBoardEmbed(sessions) {
     title: "Training Timetable",
     description: lines.join("\n").trim(),
   });
+}
+
+/** V2 payload for the timetable board message. */
+function buildTimetableV2Payload(sessions, client) {
+  return {
+    flags: MessageFlags.IsComponentsV2,
+    components: [buildTimetableV2(sessions, client)],
+  };
 }
 
 /** Action row with a Refresh button and (optionally) a portal link. */
@@ -427,22 +485,75 @@ async function autoUpdateBoard(client, { channelKey, markerId, buildEmbedsFn, bu
 }
 
 /** Refresh the trainings channel board (session list + join buttons). */
-/** Refresh the timetable channel board. */
+/** Refresh the timetable channel board (V2 message, edits in place). */
 async function updateTimetableBoard(client) {
-  return autoUpdateBoard(client, {
-    channelKey: "timetable",
-    markerId: TIMETABLE_REFRESH_ID,
-    buildEmbedsFn: (sessions) => [buildTimetableBoardEmbed(sessions)],
-    buildComponentsFn: () => [buildTimetableRow()],
-    fetchLimit: 10,
-    label: "Timetable",
+  const id = config.channels.timetable();
+  if (!id) {
+    return { ok: false, count: 0, changed: false, error: "timetable channel not configured" };
+  }
+  const channel = await client.channels.fetch(id).catch(() => null);
+  if (!channel || !channel.isTextBased()) {
+    return { ok: false, count: 0, changed: false, error: "timetable channel not found" };
+  }
+
+  let sessions = [];
+  try {
+    sessions = await fetchBoardSessions(10);
+  } catch (e) {
+    console.error("[Boards] Timetable: failed to fetch sessions:", e);
+    return { ok: false, count: 0, changed: false, error: "Failed to fetch sessions" };
+  }
+
+  const payload = buildTimetableV2Payload(sessions, client);
+  const isV2 = (m) =>
+    m.author?.id === client.user.id && m.flags?.has?.(MessageFlags.IsComponentsV2);
+
+  const messages = await channel.messages.fetch({ limit: 20 }).catch(() => null);
+  const list = messages ? [...messages.values()] : [];
+  let board = list.find(isV2) ?? null;
+
+  const sig = JSON.stringify({
+    s: sessions.map((x) => [x.id, x.title, x.scheduled_at, x.status, x.hostName, x.roblox_game_link]),
   });
+  if (board && board._fwSig === sig) {
+    return { ok: true, count: sessions.length, changed: false };
+  }
+  if (board) {
+    const edited = await board.edit(payload).then(() => true).catch(() => false);
+    if (!edited) board = null;
+  }
+  if (!board) {
+    board = await channel.send(payload).catch((e) => {
+      console.error("[Boards] Timetable: failed to post:", e?.message ?? e);
+      return null;
+    });
+  }
+  if (board) board._fwSig = sig;
+
+  // Remove legacy embed timetable messages (they carry the Refresh button).
+  for (const m of list) {
+    if (m.id === board?.id) continue;
+    const legacy =
+      m.author?.id === client.user.id &&
+      ((m.embeds?.[0]?.title === "Training Timetable") ||
+        (m.components ?? []).some((row) =>
+          (row.components ?? []).some((b) => buttonId(b) === TIMETABLE_REFRESH_ID),
+        ));
+    if (legacy) await m.delete().catch(() => {});
+  }
+
+  console.log(
+    `[Boards] Timetable updated in ${id} (${sessions.length} session${sessions.length === 1 ? "" : "s"})`,
+  );
+  return { ok: true, count: sessions.length, changed: true };
 }
 
 module.exports = {
   TIMETABLE_REFRESH_ID,
   TRAININGS_REFRESH_ID,
   fetchBoardSessions,
+  buildTimetableV2,
+  buildTimetableV2Payload,
   buildTimetableBoardEmbed,
   buildTimetableRow,
   buildSessionEmbed,

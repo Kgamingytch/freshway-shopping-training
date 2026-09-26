@@ -32,15 +32,10 @@ async function postTimetable(client, { channelId } = {}) {
   }
 
   const sessions = await fetchUpcomingSessions();
-  const sent = await channel
-    .send({
-      embeds: [buildTimetableEmbed(sessions)],
-      components: [buildTimetableRow()],
-    })
-    .catch((e) => {
-      console.error("[Timetable] Failed to send:", e);
-      return null;
-    });
+  const sent = await channel.send(boards.buildTimetableV2Payload(sessions, client)).catch((e) => {
+    console.error("[Timetable] Failed to send:", e);
+    return null;
+  });
 
   if (!sent) return { ok: false, count: 0, error: "Failed to send" };
   console.log(`[Timetable] Posted ${sessions.length} session(s) to ${id}`);
@@ -51,10 +46,7 @@ async function postTimetable(client, { channelId } = {}) {
 async function updateTimetableMessage(client, message) {
   try {
     const sessions = await fetchUpcomingSessions();
-    await message.edit({
-      embeds: [buildTimetableEmbed(sessions)],
-      components: [buildTimetableRow()],
-    });
+    await message.edit(boards.buildTimetableV2Payload(sessions, client));
     console.log(`[Timetable] Refreshed message in ${message.channelId}`);
     return true;
   } catch (e) {

@@ -40,6 +40,14 @@ const {
 const {
   SUBSCRIBE_ID,
   UNSUBSCRIBE_PREFIX,
+  PB_SUB_PREFIX,
+  PB_UNSUB_PREFIX,
+  PB_MINE_ID,
+  PB_UNSUB_ALL_ID,
+  handleSessionSubscribe,
+  handleSessionUnsubscribe,
+  handleMySubscriptions,
+  handleUnsubscribeAll,
   handleSubscribeButton,
   handleUnsubscribeButton,
 } = require("../lib/public-board");
@@ -97,6 +105,14 @@ module.exports = {
         await handleSubscribeButton(interaction);
       } else if (id === UNSUBSCRIBE_PREFIX) {
         await handleUnsubscribeButton(interaction);
+      } else if (id.startsWith(PB_SUB_PREFIX)) {
+        await handleSessionSubscribe(interaction, id.slice(PB_SUB_PREFIX.length));
+      } else if (id.startsWith(PB_UNSUB_PREFIX)) {
+        await handleSessionUnsubscribe(interaction, id.slice(PB_UNSUB_PREFIX.length));
+      } else if (id === PB_MINE_ID) {
+        await handleMySubscriptions(interaction);
+      } else if (id === PB_UNSUB_ALL_ID) {
+        await handleUnsubscribeAll(interaction);
       }
       return;
     }

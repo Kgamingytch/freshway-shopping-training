@@ -73,6 +73,7 @@ async function notifySessionCreated(client, sessionId) {
     if (created) {
       await publicBoard.notifySubscribers(client, {
         title: `New Training Session: ${created.title}`,
+        sessionId,
         description: [
           `> A new training session **${created.title}** has been added.`,
           `> **When:** ${unixTimestamp(created.scheduled_at)}`,
@@ -119,6 +120,7 @@ async function notifySessionStatusChanged(client, sessionId, oldStatus, newStatu
 
     await publicBoard.notifySubscribers(client, {
       title: `Training Update: ${session.title}`,
+      sessionId,
       description: [
         `> The session **${session.title}** changed status.`,
         `> **${capitalise(oldStatus)}** → **${capitalise(newStatus)}**`,
@@ -145,6 +147,7 @@ async function notifySessionDeleted(client, sessionId, title, deletedBy) {
 
   await publicBoard.notifySubscribers(client, {
     title: `Training Cancelled: ${title}`,
+    sessionId,
     description: [
       `> The session **${title}** has been removed from the schedule.`,
       `> **Deleted by:** ${deletedBy}`,

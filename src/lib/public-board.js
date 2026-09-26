@@ -1,39 +1,55 @@
-// Public Training Board - a read-only, public version of the trainings
-// board, posted in its own channel so everyone (not just staff) can see
-// upcoming trainings.
+// Public Training Board - Discord Components V2 "Shift Board" style.
 //
-// Layout (matches the original board from the previous provider):
-//   - Header message: "<:training:...> | Training Board" embed with the
-//     "Subscribe to training's" button under it. When there are no active
-//     trainings the header says so, exactly like the original.
-//   - One message per session: a public embed (host, time, status, game,
-//     Co-Hosts, Helpers) with no buttons.
+// One self-updating V2 message in its own channel that everyone can see:
+//   - Header container (brand green): "FreshWay Shift Board" heading with the
+//     bot avatar, a "Next session" line, helper text and a "My Subscriptions"
+//     button.
+//   - One container per session: status chip, timestamp (full + relative),
+//     Host / Co-Host / Helper mentions, optional game link and a per-session
+//     "Subscribe" button.
 //
-// The **Subscribe** button lets anyone opt in to DM notifications whenever
-// a session is added, changes status (pending / scheduled / ongoing /
-// completed / cancelled), or is deleted.
+// "Subscribe" opts the user into DM updates for THAT session; "My
+// Subscriptions" lists everything they follow with Unsubscribe buttons.
+// Legacy string subscriptions (from the old global button) are kept and
+// receive updates for every session ("*").
 //
-// Subscriptions and the board's message ids persist in data/public-board.json
-// so they survive bot restarts without needing a new Supabase table.
+// Board message id, fingerprints and subscriptions persist in
+// data/public-board.json so restarts do not post duplicates.
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require("discord.js");
+const {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ContainerBuilder,
+  MessageFlags,
+  SectionBuilder,
+  SeparatorBuilder,
+  SeparatorSpacingSize,
+  TextDisplayBuilder,
+  ThumbnailBuilder,
+} = require("discord.js");
 const { getSupabase } = require("./supabase");
 const { sendDiscordDm } = require("./dms");
-const { buildEmbed } = require("./embeds");
 const config = require("../config");
 
 // Emojis provided by the guild (do not change without updating the guild).
 const HEADER_EMOJI = "<:training:1525213820358758601>";
 const BUTTON_EMOJI = "<:announcement:1520666633633534112>";
 
-const HEADER_TITLE = `${HEADER_EMOJI} | Training Board`;
-const NO_SESSIONS_DESC =
-  "There are currently no active trainings at this moment, please check back at a later time.";
+const BRAND_GREEN = 0x1a5632;
 
-const SUBSCRIBE_ID = "public_board_subscribe";
-const UNSUBSCRIBE_PREFIX = "public_board_unsubscribe";
+const SUBSCRIBE_ID = "public_board_subscribe"; // legacy global button id
+const UNSUBSCRIBE_PREFIX = "public_board_unsubscribe"; // legacy global id
+
+const PB_SUB_PREFIX = "pb_sub:"; // + sessionId
+const PB_UNSUB_PREFIX = "pb_unsub:"; // + sessionId
+const PB_MINE_ID = "pb_mine";
+const PB_UNSUB_ALL_ID = "pb_unsub_all";
+
+// Optional image used as the thumbnail on every session container.
+const SHIFT_IMAGE_URL = process.env.FRESHWAY_SHIFT_IMAGE_URL?.trim() || null;
 
 // ---------- Persistent state (subscriptions + message ids) ----------
 
@@ -41,16 +57,33 @@ const DATA_DIR = path.resolve(__dirname, "../../data");
 const DATA_FILE = path.join(DATA_DIR, "public-board.json");
 
 function defaultState() {
-  return { subscriptions: [], messages: { header: null, sessions: {} } };
+  return { subscriptions: [], messages: { v2: null, header: null, sessions: {} } };
+}
+
+/**
+ * Normalise stored subscriptions: legacy entries are plain user-id strings
+ * (global "*" subscriptions); new entries are { userId, sessionId, title }.
+ */
+function normaliseSubscriptions(raw) {
+  const list = Array.isArray(raw) ? raw : [];
+  return list
+    .map((entry) =>
+      typeof entry === "string"
+        ? { userId: entry, sessionId: "*", title: null }
+        : entry && entry.userId && entry.sessionId
+          ? { userId: String(entry.userId), sessionId: String(entry.sessionId), title: entry.title ?? null }
+          : null,
+    )
+    .filter(Boolean);
 }
 
 function loadState() {
   try {
-    const raw = fs.readFileSync(DATA_FILE, "utf8");
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
     return {
-      subscriptions: Array.isArray(parsed.subscriptions) ? parsed.subscriptions : [],
+      subscriptions: normaliseSubscriptions(parsed.subscriptions),
       messages: {
+        v2: typeof parsed.messages?.v2 === "string" ? parsed.messages.v2 : null,
         header: typeof parsed.messages?.header === "string" ? parsed.messages.header : null,
         sessions:
           parsed.messages?.sessions && typeof parsed.messages.sessions === "object"
@@ -75,7 +108,7 @@ function saveState(state) {
 // ---------- Data ----------
 
 /** Fetch upcoming public sessions (pending + scheduled + ongoing). */
-async function fetchPublicSessions(limit = 10) {
+async function fetchPublicSessions(limit = 5) {
   const sb = getSupabase();
   if (!sb) {
     console.warn("[PublicBoard] Supabase not configured - cannot fetch sessions");
@@ -85,14 +118,15 @@ async function fetchPublicSessions(limit = 10) {
   const { data } = await sb
     .from("training_sessions")
     .select(
-      "id, title, status, scheduled_at, host_user_id, co_host_user_ids, helper_user_ids, roblox_game_link",
+      "id, title, session_type, status, scheduled_at, host_user_id, co_host_user_ids, helper_user_ids, roblox_game_link",
     )
     .in("status", ["pending", "scheduled", "ongoing"])
     .order("scheduled_at", { ascending: true, nullsFirst: false })
     .limit(limit);
   const sessions = data ?? [];
 
-  // Resolve host / co-host / helper names (Roblox preferred, Discord fallback).
+  // Resolve host / co-host / helper identities. Prefer a Discord mention
+  // (profiles.discord_id), fall back to Roblox username, then Discord name.
   const userIds = new Set();
   for (const s of sessions) {
     if (s.host_user_id) userIds.add(s.host_user_id);
@@ -104,101 +138,165 @@ async function fetchPublicSessions(limit = 10) {
   let robloxMap = new Map();
   if (ids.length > 0) {
     const [profiles, roblox] = await Promise.all([
-      sb.from("profiles").select("id, discord_username").in("id", ids),
+      sb.from("profiles").select("id, discord_username, discord_id").in("id", ids),
       sb.from("roblox_accounts").select("user_id, roblox_username").in("user_id", ids),
     ]);
-    profileMap = new Map((profiles.data ?? []).map((p) => [p.id, p.discord_username]));
+    profileMap = new Map((profiles.data ?? []).map((p) => [p.id, p]));
     robloxMap = new Map((roblox.data ?? []).map((r) => [r.user_id, r.roblox_username]));
   }
-  const nameFor = (userId) =>
-    userId ? (robloxMap.get(userId) ?? profileMap.get(userId) ?? "Unknown") : null;
+
+  const displayFor = (userId) => {
+    if (!userId) return null;
+    const profile = profileMap.get(userId);
+    if (profile?.discord_id) return `<@${profile.discord_id}>`;
+    return robloxMap.get(userId) ?? profile?.discord_username ?? "Unknown";
+  };
 
   return sessions.map((s) => ({
     ...s,
-    hostName: s.host_user_id ? (nameFor(s.host_user_id) ?? "Unknown") : "Unassigned",
-    coHostNames: (s.co_host_user_ids ?? []).map(nameFor).filter(Boolean),
-    helperNames: (s.helper_user_ids ?? []).map(nameFor).filter(Boolean),
+    hostMention: s.host_user_id ? displayFor(s.host_user_id) : null,
+    coHostMentions: (s.co_host_user_ids ?? []).map(displayFor).filter(Boolean),
+    helperMentions: (s.helper_user_ids ?? []).map(displayFor).filter(Boolean),
   }));
 }
 
-// ---------- Embeds & components ----------
+// ---------- V2 component builders ----------
 
 function capitalise(s) {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : "";
 }
 
-/** The header embed: exact copy of the original board. */
-function buildHeaderEmbed(sessions) {
-  const description = sessions.length
-    ? `> **${sessions.length}** upcoming training session${sessions.length === 1 ? "" : "s"} listed below.\n> Subscribe below to get a DM whenever a session is added or its status changes.`
-    : `> ${NO_SESSIONS_DESC}`;
-  return buildEmbed({ title: HEADER_TITLE, description });
+function unixSeconds(iso) {
+  return Math.floor(new Date(iso).getTime() / 1000);
 }
 
-/** One session's public embed: no buttons, just the details. */
-function buildPublicSessionEmbed(session) {
-  const time = session.scheduled_at
-    ? `<t:${Math.floor(new Date(session.scheduled_at).getTime() / 1000)}:F>`
-    : "Not scheduled";
-  const lines = [
-    `> Host: ${session.hostName}`,
-    `> Time: ${time}`,
-    session.status ? `> Status: ${capitalise(session.status)}` : "",
-    session.roblox_game_link ? `> Game: [Join Server](${session.roblox_game_link})` : "",
-    `> Co-Hosts: ${session.coHostNames.length ? session.coHostNames.join(", ") : "None"}`,
-    `> Helpers: ${session.helperNames.length ? session.helperNames.join(", ") : "None"}`,
-  ].filter(Boolean);
-  return buildEmbed({ title: session.title, description: lines.join("\n") });
+/** Emoji + accent colour per session status. */
+function statusStyle(status) {
+  switch (status) {
+    case "scheduled":
+      return { emoji: "🟡", color: 0xe6a817, label: "Scheduled" };
+    case "ongoing":
+      return { emoji: "🔴", color: 0x1f8b4c, label: "Ongoing" };
+    default:
+      return { emoji: "⚪", color: 0x95a5a6, label: capitalise(status || "Pending") };
+  }
 }
 
-/** The Subscribe button row (green, with the announcement emoji). */
-function buildSubscribeRow() {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(SUBSCRIBE_ID)
-      .setLabel("Subscribe to training's")
-      .setEmoji(BUTTON_EMOJI)
-      .setStyle(ButtonStyle.Success),
+function avatarUrl(client) {
+  try {
+    return client.user.displayAvatarURL({ size: 128 });
+  } catch {
+    return undefined;
+  }
+}
+
+/** Build the full V2 component list: header container + one per session. */
+function buildV2Components(sessions, client) {
+  const components = [];
+
+  // ----- Header container -----
+  const header = new ContainerBuilder().setAccentColor(BRAND_GREEN);
+  const avatar = avatarUrl(client);
+  if (avatar) {
+    // Sections require an accessory; only use one when we have a thumbnail.
+    const headerSection = new SectionBuilder().addTextDisplayComponents(
+      (t) => t.setContent(`## ${HEADER_EMOJI} FreshWay Shift Board`),
+    );
+    headerSection.setThumbnailAccessory(new ThumbnailBuilder().setURL(avatar));
+    header.addSectionComponents(headerSection);
+  } else {
+    header.addTextDisplayComponents((t) => t.setContent(`## ${HEADER_EMOJI} FreshWay Shift Board`));
+  }
+
+  if (sessions.length === 0) {
+    header.addTextDisplayComponents(
+      (t) =>
+        t.setContent(
+          "> There are currently no active trainings at this moment, please check back at a later time.",
+        ),
+    );
+  } else {
+    const next = sessions.find((s) => s.scheduled_at) ?? sessions[0];
+    const nextLine = next.scheduled_at
+      ? `${next.title} · <t:${unixSeconds(next.scheduled_at)}:R>`
+      : `${next.title} · not scheduled yet`;
+    const st = statusStyle(next.status);
+    header.addTextDisplayComponents((t) => t.setContent(`${st.emoji} **Next session:** ${nextLine}`));
+  }
+  header.addTextDisplayComponents(
+    (t) =>
+      t.setContent(
+        "-# Use the buttons under a session to subscribe or unsubscribe from DM updates.",
+      ),
   );
-}
-
-// ---------- Fingerprints (avoid pointless edits) ----------
-
-function buttonId(button) {
-  return button?.data?.custom_id ?? button?.customId ?? null;
-}
-
-function hasButton(message, id) {
-  return (message.components ?? []).some((row) =>
-    (row.components ?? []).some((b) => buttonId(b) === id),
+  header.addActionRowComponents(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(PB_MINE_ID)
+        .setLabel("My Subscriptions")
+        .setEmoji(BUTTON_EMOJI)
+        .setStyle(ButtonStyle.Success),
+    ),
   );
-}
+  components.push(header);
 
-function messageFingerprint(message) {
-  const embed = message.embeds?.[0];
-  return JSON.stringify({
-    t: embed?.title ?? null,
-    d: embed?.description ?? null,
-    c: (message.components ?? []).map((row) => (row.components ?? []).map(buttonId)),
-  });
-}
+  // ----- One container per session -----
+  for (const s of sessions) {
+    components.push(
+      new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true),
+    );
 
-function payloadFingerprint(payload) {
-  return JSON.stringify({
-    t: payload.embeds?.[0]?.title ?? null,
-    d: payload.embeds?.[0]?.description ?? null,
-    c: (payload.components ?? []).map((row) => (row.components ?? []).map(buttonId)),
-  });
+    const st = statusStyle(s.status);
+    const time = s.scheduled_at
+      ? `<t:${unixSeconds(s.scheduled_at)}:F> (<t:${unixSeconds(s.scheduled_at)}:R>)`
+      : "Not scheduled";
+    const lines = [
+      `**${s.title}**`,
+      `${st.emoji} \`${st.label}\`${s.session_type ? ` · ${s.session_type}` : ""}`,
+      `🕐 ${time}`,
+      `👤 Host: ${s.hostMention ?? "Unassigned"}`,
+    ];
+    if (s.coHostMentions.length || s.helperMentions.length) {
+      const co = s.coHostMentions.length ? `Co-Host: ${s.coHostMentions.join(", ")}` : null;
+      const he = s.helperMentions.length ? `Helper: ${s.helperMentions.join(", ")}` : null;
+      lines.push(`👥 ${[co, he].filter(Boolean).join(" · ")}`);
+    }
+    if (s.roblox_game_link) lines.push(`🔗 [Join Server](${s.roblox_game_link})`);
+
+    const container = new ContainerBuilder().setAccentColor(st.color);
+    if (SHIFT_IMAGE_URL) {
+      const section = new SectionBuilder().addTextDisplayComponents((t) =>
+        t.setContent(lines.join("\n")),
+      );
+      section.setThumbnailAccessory(new ThumbnailBuilder().setURL(SHIFT_IMAGE_URL));
+      container.addSectionComponents(section);
+    } else {
+      container.addTextDisplayComponents((t) => t.setContent(lines.join("\n")));
+    }
+    container.addActionRowComponents(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(PB_SUB_PREFIX + s.id)
+          .setLabel("Subscribe")
+          .setEmoji(BUTTON_EMOJI)
+          .setStyle(ButtonStyle.Success),
+      ),
+    );
+    components.push(container);
+  }
+
+  return components;
 }
 
 // ---------- Board update ----------
 
+// Last posted session signature (module level). Guards against pointless
+// edits from the 20s scheduler; resets on restart (one extra edit, fine).
+let lastSignature = null;
+
 /**
- * Update the public board: header message (title + Subscribe button) and one
- * message per session. Messages are edited in place when their content
- * changed; new sessions are appended; removed sessions are deleted. Message
- * ids are persisted so restarts reuse the same messages instead of posting
- * duplicates. Only the bot's own messages are touched.
+ * Update the public board message in place. The old multi-message embed
+ * layout is cleaned up automatically.
  */
 async function updatePublicBoard(client) {
   const channelId = config.channels.publicBoard();
@@ -212,7 +310,7 @@ async function updatePublicBoard(client) {
 
   let sessions = [];
   try {
-    sessions = await fetchPublicSessions(10);
+    sessions = await fetchPublicSessions(5);
   } catch (e) {
     console.error("[PublicBoard] Failed to fetch sessions:", e);
     return { ok: false, count: 0, changed: false, error: "Failed to fetch sessions" };
@@ -220,91 +318,185 @@ async function updatePublicBoard(client) {
 
   const state = loadState();
   const stateBefore = JSON.stringify(state);
-  const messages = await channel.messages.fetch({ limit: 30 }).catch(() => null);
-  const list = messages ? [...messages.values()] : [];
+  const signature = JSON.stringify(sessions);
+
+  const isV2 = (m) => m.author?.id === client.user.id && m.flags?.has?.(MessageFlags.IsComponentsV2);
   const isBot = (m) => m.author?.id === client.user.id;
 
-  // ----- Header message -----
-  const headerPayload = { embeds: [buildHeaderEmbed(sessions)], components: [buildSubscribeRow()] };
-  let header = null;
-  if (state.messages.header) {
-    header = list.find((m) => m.id === state.messages.header) ?? null;
+  // Resolve the V2 board message: state id -> adopt any V2 message -> none.
+  let board = null;
+  if (state.messages.v2) {
+    board = (await channel.messages.fetch(state.messages.v2).catch(() => null)) ?? null;
   }
-  if (!header) {
-    // Adopt an existing header (e.g. after a state-file loss) instead of
-    // posting a duplicate.
-    header = list.find((m) => isBot(m) && hasButton(m, SUBSCRIBE_ID)) ?? null;
-  }
-  if (header) {
-    if (messageFingerprint(header) !== payloadFingerprint(headerPayload)) {
-      const edited = await header.edit(headerPayload).then(() => true).catch(() => false);
-      if (!edited) {
-        header = await channel.send(headerPayload).catch(() => null);
-      }
-    }
-  } else {
-    header = await channel.send(headerPayload).catch(() => null);
-  }
-  if (header) state.messages.header = header.id;
-
-  // ----- Session messages -----
-  for (const [sid, mid] of Object.entries(state.messages.sessions)) {
-    if (!sessions.some((s) => s.id === sid)) {
-      const m = list.find((x) => x.id === mid);
-      if (m) await m.delete().catch(() => {});
-      delete state.messages.sessions[sid];
-    }
+  if (!board) {
+    board =
+      [...(await channel.messages.fetch({ limit: 30 }).catch(() => new Map())).values()].find(
+        isV2,
+      ) ?? null;
   }
 
-  for (const s of sessions) {
-    const payload = { embeds: [buildPublicSessionEmbed(s)] };
-    let m = null;
-    if (state.messages.sessions[s.id]) {
-      m = list.find((x) => x.id === state.messages.sessions[s.id]) ?? null;
-    }
-    if (!m) {
-      // Adopt an existing message by embed title (state-file loss).
-      m =
-        list.find(
-          (x) =>
-            isBot(x) &&
-            (x.components?.length ?? 0) === 0 &&
-            x.embeds?.[0]?.title === String(s.title).slice(0, 256),
-        ) ?? null;
-    }
-    if (m) {
-      if (messageFingerprint(m) !== payloadFingerprint(payload)) {
-        await m.edit(payload).catch((e) =>
-          console.error("[PublicBoard] Failed to edit session message:", e?.message ?? e),
-        );
-      }
-    } else {
-      m = await channel.send(payload).catch((e) => {
-        console.error("[PublicBoard] Failed to post session message:", e?.message ?? e);
+  const payload = {
+    flags: MessageFlags.IsComponentsV2,
+    components: buildV2Components(sessions, client),
+  };
+
+  if (board && lastSignature === signature) {
+    // Nothing changed since the last post; skip the edit entirely.
+  } else if (board) {
+    const edited = await board.edit(payload).then(() => true).catch(() => false);
+    if (!edited) {
+      board = await channel.send(payload).catch((e) => {
+        console.error("[PublicBoard] Failed to post board:", e?.message ?? e);
         return null;
       });
     }
-    if (m) state.messages.sessions[s.id] = m.id;
+    lastSignature = signature;
+  } else {
+    board = await channel.send(payload).catch((e) => {
+      console.error("[PublicBoard] Failed to post board:", e?.message ?? e);
+      return null;
+    });
+    lastSignature = signature;
+  }
+  if (board) state.messages.v2 = board.id;
+
+  // Clean up old-layout bot messages (embed header/session messages).
+  for (const m of [...(await channel.messages.fetch({ limit: 30 }).catch(() => new Map())).values()]) {
+    const oldStyle =
+      isBot(m) &&
+      m.id !== board?.id &&
+      ((m.embeds?.length ?? 0) > 0 ||
+        (m.components ?? []).some((row) =>
+          (row.components ?? []).some((b) => (b?.data?.custom_id ?? b?.customId) === SUBSCRIBE_ID),
+        ));
+    if (oldStyle) await m.delete().catch(() => {});
   }
 
   if (JSON.stringify(state) !== stateBefore) saveState(state);
-
-  if (sessions.length === 0 && list.length > 0) {
-    // header edit above already switched it to the "no active trainings" copy
-  }
   console.log(
     `[PublicBoard] Updated in ${channelId} (${sessions.length} session${sessions.length === 1 ? "" : "s"})`,
   );
   return { ok: true, count: sessions.length, changed: true };
 }
 
-// ---------- Subscriptions ----------
+// ---------- Subscription handlers ----------
 
-/** Subscribe button: opt in, or show an Unsubscribe button when already in. */
+function unsubRow(sessionId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(PB_UNSUB_PREFIX + sessionId)
+      .setLabel("Unsubscribe")
+      .setStyle(ButtonStyle.Danger),
+  );
+}
+
+/** Per-session Subscribe button. */
+async function handleSessionSubscribe(interaction, sessionId) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const state = loadState();
+  const already = state.subscriptions.some(
+    (s) => s.userId === interaction.user.id && s.sessionId === sessionId,
+  );
+  if (already) {
+    await interaction.editReply({
+      content: "You are already subscribed to this session.",
+      components: [unsubRow(sessionId)],
+    });
+    return true;
+  }
+  const session = await fetchPublicSessions(25).then((all) => all.find((x) => x.id === sessionId));
+  state.subscriptions.push({
+    userId: interaction.user.id,
+    sessionId,
+    title: session?.title ?? null,
+  });
+  saveState(state);
+  await interaction.editReply({
+    content: `You're subscribed to **${session?.title ?? "this session"}**! You'll get a DM when it is added, changes status, or is cancelled.`,
+    components: [unsubRow(sessionId)],
+  });
+  return true;
+}
+
+/** Per-session Unsubscribe button. */
+async function handleSessionUnsubscribe(interaction, sessionId) {
+  await interaction.deferUpdate();
+  const state = loadState();
+  state.subscriptions = state.subscriptions.filter(
+    (s) => !(s.userId === interaction.user.id && s.sessionId === sessionId),
+  );
+  saveState(state);
+  await interaction.editReply({
+    content: "Unsubscribed. You will no longer receive DM updates for this session.",
+    components: [],
+  });
+  return true;
+}
+
+/** "My Subscriptions": ephemeral list with Unsubscribe buttons. */
+async function handleMySubscriptions(interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const state = loadState();
+  const mine = state.subscriptions.filter((s) => s.userId === interaction.user.id);
+  if (mine.length === 0) {
+    await interaction.editReply({
+      content:
+        "You have no subscriptions yet. Press **Subscribe** under a session on the board to get DM updates about it.",
+      components: [],
+    });
+    return true;
+  }
+
+  const components = [];
+  for (let i = 0; i < mine.length && components.length < 5; i += 5) {
+    components.push(
+      new ActionRowBuilder().addComponents(
+        ...mine.slice(i, i + 5).map((s) =>
+          new ButtonBuilder()
+            .setCustomId(PB_UNSUB_PREFIX + s.sessionId)
+            .setLabel(`Unsubscribe: ${(s.title ?? "session").slice(0, 60)}`)
+            .setStyle(ButtonStyle.Danger),
+        ),
+      ),
+    );
+  }
+  if (mine.length > 5) {
+    components.push(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(PB_UNSUB_ALL_ID)
+          .setLabel("Unsubscribe from all")
+          .setStyle(ButtonStyle.Danger),
+      ),
+    );
+  }
+  await interaction.editReply({
+    content: `You are subscribed to **${mine.length}** session${mine.length === 1 ? "" : "s"}:`,
+    components,
+  });
+  return true;
+}
+
+/** Unsubscribe from everything. */
+async function handleUnsubscribeAll(interaction) {
+  await interaction.deferUpdate();
+  const state = loadState();
+  state.subscriptions = state.subscriptions.filter((s) => s.userId !== interaction.user.id);
+  saveState(state);
+  await interaction.editReply({
+    content: "Unsubscribed from all session updates.",
+    components: [],
+  });
+  return true;
+}
+
+// ----- Legacy global Subscribe/Unsubscribe (old board messages) -----
+
+/** Legacy global subscribe button: opt in to every session. */
 async function handleSubscribeButton(interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const state = loadState();
-  if (state.subscriptions.includes(interaction.user.id)) {
+  if (state.subscriptions.some((s) => s.userId === interaction.user.id && s.sessionId === "*")) {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(UNSUBSCRIBE_PREFIX)
@@ -317,7 +509,7 @@ async function handleSubscribeButton(interaction) {
     });
     return true;
   }
-  state.subscriptions.push(interaction.user.id);
+  state.subscriptions.push({ userId: interaction.user.id, sessionId: "*", title: null });
   saveState(state);
   await interaction.editReply({
     content:
@@ -326,11 +518,13 @@ async function handleSubscribeButton(interaction) {
   return true;
 }
 
-/** Unsubscribe button inside the ephemeral menu. */
+/** Legacy global unsubscribe button. */
 async function handleUnsubscribeButton(interaction) {
   await interaction.deferUpdate();
   const state = loadState();
-  state.subscriptions = state.subscriptions.filter((id) => id !== interaction.user.id);
+  state.subscriptions = state.subscriptions.filter(
+    (s) => !(s.userId === interaction.user.id && s.sessionId === "*"),
+  );
   saveState(state);
   await interaction.editReply({
     content: "You are unsubscribed. You will no longer receive training update DMs.",
@@ -339,17 +533,25 @@ async function handleUnsubscribeButton(interaction) {
   return true;
 }
 
+// ---------- Subscriber DMs ----------
+
 /**
- * DM every subscriber (rate limited). Best effort: failures are ignored.
- * Returns the number of DMs successfully sent.
+ * DM everyone subscribed to the given session (or to "*" / everything).
+ * Rate limited; failures are ignored. Returns the number of DMs sent.
  */
-async function notifySubscribers(client, { title, description }) {
+async function notifySubscribers(client, { title, description, sessionId }) {
   const state = loadState();
-  const subscribers = state.subscriptions ?? [];
-  if (subscribers.length === 0) return 0;
+  const recipients = [
+    ...new Set(
+      state.subscriptions
+        .filter((s) => !sessionId || s.sessionId === sessionId || s.sessionId === "*")
+        .map((s) => s.userId),
+    ),
+  ];
+  if (recipients.length === 0) return 0;
 
   let sent = 0;
-  for (const discordId of subscribers) {
+  for (const discordId of recipients) {
     try {
       const ok = await sendDiscordDm(client, discordId, { title, description });
       if (ok) sent++;
@@ -358,20 +560,25 @@ async function notifySubscribers(client, { title, description }) {
     }
     await new Promise((r) => setTimeout(r, 350));
   }
-  console.log(`[PublicBoard] Notified ${sent}/${subscribers.length} subscriber(s)`);
+  console.log(`[PublicBoard] Notified ${sent}/${recipients.length} subscriber(s)`);
   return sent;
 }
 
 module.exports = {
-  HEADER_TITLE,
-  NO_SESSIONS_DESC,
+  HEADER_TITLE: `${HEADER_EMOJI} | Training Board`,
   SUBSCRIBE_ID,
   UNSUBSCRIBE_PREFIX,
+  PB_SUB_PREFIX,
+  PB_UNSUB_PREFIX,
+  PB_MINE_ID,
+  PB_UNSUB_ALL_ID,
   fetchPublicSessions,
-  buildHeaderEmbed,
-  buildPublicSessionEmbed,
-  buildSubscribeRow,
+  buildV2Components,
   updatePublicBoard,
+  handleSessionSubscribe,
+  handleSessionUnsubscribe,
+  handleMySubscriptions,
+  handleUnsubscribeAll,
   handleSubscribeButton,
   handleUnsubscribeButton,
   notifySubscribers,
