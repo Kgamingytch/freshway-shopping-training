@@ -130,6 +130,15 @@ module.exports = {
     if (interaction.isStringSelectMenu()) {
       if (interaction.customId === BOOKING_SELECT_ID) {
         await handleBookingSelect(interaction);
+      } else if (
+        await hostPanel
+          .handleHostPanelInteraction(interaction)
+          .catch((e) => {
+            console.error("[HostPanel] select failed:", e);
+            return false;
+          })
+      ) {
+        // handled by the host DM control panel
       }
       return;
     }
@@ -142,6 +151,15 @@ module.exports = {
         await handleVotingModal(interaction);
       } else if (interaction.customId.startsWith(BOOKING_MODAL_ID)) {
         await handleBookingModal(interaction);
+      } else if (
+        await hostPanel
+          .handleHostPanelInteraction(interaction)
+          .catch((e) => {
+            console.error("[HostPanel] modal failed:", e);
+            return false;
+          })
+      ) {
+        // handled by the host DM control panel
       }
       return;
     }
