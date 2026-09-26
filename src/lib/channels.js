@@ -1,3 +1,4 @@
+// [comment]
 // Channel posting - sends FreshWay embeds to configured Discord channels.
 //
 // Channel IDs come from environment variables (see config.channels), so the

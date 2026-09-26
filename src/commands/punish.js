@@ -1,3 +1,4 @@
+// [gavel]
 const { SlashCommandBuilder, MessageFlags } = require("discord.js");
 const { notifyPunishmentIssued } = require("../lib/notifications");
 const { canManage } = require("../lib/guards");

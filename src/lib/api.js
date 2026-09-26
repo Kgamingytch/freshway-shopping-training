@@ -1,3 +1,4 @@
+// [connected]
 // HTTP API - the FreshWay website calls these endpoints to send Discord
 // messages. All Discord logic lives in this bot; the website only triggers.
 //

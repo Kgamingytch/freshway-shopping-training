@@ -1,3 +1,4 @@
+// [key]
 const { SlashCommandBuilder, MessageFlags } = require("discord.js");
 const { ensureVerification } = require("../lib/verification");
 const { canManage } = require("../lib/guards");

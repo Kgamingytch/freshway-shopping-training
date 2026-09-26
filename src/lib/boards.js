@@ -1,3 +1,4 @@
+// [calendar]
 // Live boards - one self-updating message per channel.
 //
 // Both the trainings channel and the timetable channel show a single
@@ -20,14 +21,13 @@ const {
   ButtonStyle,
   ContainerBuilder,
   MessageFlags,
-  SectionBuilder,
   SeparatorBuilder,
   SeparatorSpacingSize,
   TextDisplayBuilder,
-  ThumbnailBuilder,
 } = require("discord.js");
 const { getSupabase } = require("./supabase");
 const { buildEmbed } = require("./embeds");
+const E = require("./emojis");
 const { buildSessionManageRow, MANAGE_PREFIX } = require("./session-join");
 const config = require("../config");
 
@@ -97,20 +97,7 @@ const TIMETABLE_IMAGE_URL = process.env.FRESHWAY_SHIFT_IMAGE_URL?.trim() || null
 /** Build the timetable as a V2 container. With no sessions it simply says so. */
 function buildTimetableV2(sessions, client) {
   const container = new ContainerBuilder().setAccentColor(0x1a5632);
-  try {
-    const avatar = client?.user?.displayAvatarURL?.({ size: 128 });
-    if (avatar) {
-      const section = new SectionBuilder().addTextDisplayComponents((t) =>
-        t.setContent("## 🗓️ Training Timetable"),
-      );
-      section.setThumbnailAccessory(new ThumbnailBuilder().setURL(avatar));
-      container.addSectionComponents(section);
-    } else {
-      container.addTextDisplayComponents((t) => t.setContent("## 🗓️ Training Timetable"));
-    }
-  } catch {
-    container.addTextDisplayComponents((t) => t.setContent("## 🗓️ Training Timetable"));
-  }
+  container.addTextDisplayComponents((t) => t.setContent(`## ${E.calendar} Training Timetable`));
 
   if (!sessions.length) {
     container.addTextDisplayComponents((t) => t.setContent("> **No sessions scheduled.**"));
@@ -124,8 +111,8 @@ function buildTimetableV2(sessions, client) {
     const time = s.scheduled_at
       ? `<t:${Math.floor(new Date(s.scheduled_at).getTime() / 1000)}:F> (<t:${Math.floor(new Date(s.scheduled_at).getTime() / 1000)}:R>)`
       : "Not scheduled";
-    const lines = [`**${s.title}**`, `👤 Host: ${s.hostName} · 🕐 ${time}`];
-    if (s.roblox_game_link) lines.push(`🔗 [Join Server](${s.roblox_game_link})`);
+    const lines = [`**${s.title}**`, `${E.security} **Host:** ${s.hostName} · ${E.time} ${time}`];
+    if (s.roblox_game_link) lines.push(`${E.roblox} [Join Server](${s.roblox_game_link})`);
     container.addTextDisplayComponents((t) => t.setContent(lines.join("\n")));
   }
   return container;

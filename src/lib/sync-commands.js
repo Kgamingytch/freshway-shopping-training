@@ -1,3 +1,4 @@
+// [arrow]
 // Slash command sync - registers commands with Discord on EVERY startup so
 // the hosting panel never needs to run deploy-commands manually. Guild-
 // scoped when GUILD_ID is set (instant), global otherwise.

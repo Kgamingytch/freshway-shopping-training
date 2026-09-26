@@ -1,3 +1,4 @@
+// [tag]
 // Role management - add/remove Discord roles (e.g. Certified Trainer).
 
 /**

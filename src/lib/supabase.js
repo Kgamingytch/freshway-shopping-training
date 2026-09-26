@@ -1,3 +1,4 @@
+// [home]
 // Supabase access for the bot.
 //
 // The bot reads the same FreshWay tables the website uses (profiles,

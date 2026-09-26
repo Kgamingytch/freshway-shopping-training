@@ -1,3 +1,4 @@
+// [engineering]
 // Session manage flow on the trainings board.
 //
 // Each session embed on the trainings board has a single **Manage** button.
@@ -22,6 +23,8 @@ const { getSupabase } = require("./supabase");
 const { sendDiscordDm } = require("./dms");
 const { buildEmbed } = require("./embeds");
 
+const E = require("./emojis");
+
 const JOIN_CO_HOST_PREFIX = "session_join_co_host:";
 const JOIN_HELPER_PREFIX = "session_join_helper:";
 
@@ -43,10 +46,12 @@ function buildSessionJoinRow(sessionId) {
     new ButtonBuilder()
       .setCustomId(`${JOIN_CO_HOST_PREFIX}${sessionId}`)
       .setLabel("Join as Co-Host")
+      .setEmoji(E.parse(E.forward))
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`${JOIN_HELPER_PREFIX}${sessionId}`)
       .setLabel("Join as Helper")
+      .setEmoji(E.parse(E.forward))
       .setStyle(ButtonStyle.Secondary),
   );
   return row;
@@ -71,6 +76,7 @@ function buildSessionManageRow(sessionId) {
     new ButtonBuilder()
       .setCustomId(`${MANAGE_PREFIX}${sessionId}`)
       .setLabel("Manage")
+      .setEmoji(E.parse(E.engineering))
       .setStyle(ButtonStyle.Secondary),
   );
 }
@@ -324,6 +330,7 @@ function buildManageReply(session, role) {
       new ButtonBuilder()
         .setCustomId(`${MANAGE_LEAVE_PREFIX}${session.id}`)
         .setLabel(`Leave (${roleLabel(role)})`)
+        .setEmoji(E.parse(E.personminus))
         .setStyle(ButtonStyle.Danger),
     );
   } else {
@@ -331,10 +338,12 @@ function buildManageReply(session, role) {
       new ButtonBuilder()
         .setCustomId(`${MANAGE_JOIN_CO_HOST_PREFIX}${session.id}`)
         .setLabel("Join as Co-Host")
+        .setEmoji(E.parse(E.forward))
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
         .setCustomId(`${MANAGE_JOIN_HELPER_PREFIX}${session.id}`)
         .setLabel("Join as Helper")
+        .setEmoji(E.parse(E.forward))
         .setStyle(ButtonStyle.Secondary),
     );
   }

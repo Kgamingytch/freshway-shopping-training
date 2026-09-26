@@ -1,3 +1,4 @@
+// [person]
 // Discord user lookup - returns a user's current username/global name and
 // avatar URL. The website uses this to keep staff avatars fresh (Discord has
 // no public avatar API, so this is the only way).

@@ -1,3 +1,4 @@
+// [highlight]
 // FreshWay embed builder.
 //
 // All bot messages follow the FreshWay style:

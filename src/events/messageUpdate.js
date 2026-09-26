@@ -1,3 +1,4 @@
+// [pencil]
 const { Events } = require("discord.js");
 const config = require("../config");
 const { buildEmbed } = require("../lib/embeds");

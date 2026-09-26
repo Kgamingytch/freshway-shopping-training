@@ -1,3 +1,4 @@
+// [key]
 // Training Division verification system.
 //
 // Flow:

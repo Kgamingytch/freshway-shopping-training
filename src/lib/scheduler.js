@@ -1,3 +1,4 @@
+// [time]
 // Scheduled tasks - the live boards (trainings + timetable) refresh every
 // 20 seconds so the single self-updating embeds stay current; presence and
 // session reminders run on slower intervals so the website doesn't need its

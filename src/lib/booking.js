@@ -1,3 +1,4 @@
+// [document]
 // Training booking flow (the /training-booking command).
 //
 // The command opens an ephemeral message with a session-type select menu

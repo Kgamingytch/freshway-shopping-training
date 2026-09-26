@@ -1,3 +1,4 @@
+// [discord]
 // Direct messages - sends FreshWay-styled embeds to a user's DMs.
 //
 // discord.js handles rate limits and retries internally, so no manual

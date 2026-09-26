@@ -1,3 +1,4 @@
+// [vacancies]
 // Public Training Board - Discord Components V2 "Shift Board" style.
 //
 // One self-updating V2 message in its own channel that everyone can see:
@@ -33,10 +34,11 @@ const {
 const { getSupabase } = require("./supabase");
 const { sendDiscordDm } = require("./dms");
 const config = require("../config");
+const E = require("./emojis");
 
-// Emojis provided by the guild (do not change without updating the guild).
-const HEADER_EMOJI = "<:training:1525213820358758601>";
-const BUTTON_EMOJI = "<:announcement:1520666633633534112>";
+// Emojis come from the central custom-emoji registry (see ./emojis).
+const HEADER_EMOJI = E.training;
+const BUTTON_EMOJI = E.bookmarkflag;
 
 const BRAND_GREEN = 0x1a5632;
 
@@ -174,19 +176,13 @@ function unixSeconds(iso) {
 function statusStyle(status) {
   switch (status) {
     case "scheduled":
-      return { emoji: "🟡", color: 0xe6a817, label: "Scheduled" };
+      return { emoji: E.schedule, color: 0xe6a817, label: "Scheduled" };
     case "ongoing":
-      return { emoji: "🔴", color: 0x1f8b4c, label: "Ongoing" };
+      return { emoji: E.connected, color: 0x1f8b4c, label: "Ongoing" };
+    case "cancelled":
+      return { emoji: E.cross, color: 0xcc3b3b, label: "Cancelled" };
     default:
-      return { emoji: "⚪", color: 0x95a5a6, label: capitalise(status || "Pending") };
-  }
-}
-
-function avatarUrl(client) {
-  try {
-    return client.user.displayAvatarURL({ size: 128 });
-  } catch {
-    return undefined;
+      return { emoji: E.history, color: 0x95a5a6, label: capitalise(status || "Pending") };
   }
 }
 
@@ -196,17 +192,7 @@ function buildV2Components(sessions, client) {
 
   // ----- Header container -----
   const header = new ContainerBuilder().setAccentColor(BRAND_GREEN);
-  const avatar = avatarUrl(client);
-  if (avatar) {
-    // Sections require an accessory; only use one when we have a thumbnail.
-    const headerSection = new SectionBuilder().addTextDisplayComponents(
-      (t) => t.setContent(`## ${HEADER_EMOJI} FreshWay Shift Board`),
-    );
-    headerSection.setThumbnailAccessory(new ThumbnailBuilder().setURL(avatar));
-    header.addSectionComponents(headerSection);
-  } else {
-    header.addTextDisplayComponents((t) => t.setContent(`## ${HEADER_EMOJI} FreshWay Shift Board`));
-  }
+  header.addTextDisplayComponents((t) => t.setContent(`## ${HEADER_EMOJI} FreshWay Shift Board`));
 
   if (sessions.length === 0) {
     header.addTextDisplayComponents(
@@ -253,15 +239,15 @@ function buildV2Components(sessions, client) {
     const lines = [
       `**${s.title}**`,
       `${st.emoji} \`${st.label}\`${s.session_type ? ` · ${s.session_type}` : ""}`,
-      `🕐 ${time}`,
-      `👤 Host: ${s.hostMention ?? "Unassigned"}`,
+      `${E.time} ${time}`,
+      `${E.security} **Host:** ${s.hostMention ?? "Unassigned"}`,
     ];
     if (s.coHostMentions.length || s.helperMentions.length) {
       const co = s.coHostMentions.length ? `Co-Host: ${s.coHostMentions.join(", ")}` : null;
       const he = s.helperMentions.length ? `Helper: ${s.helperMentions.join(", ")}` : null;
-      lines.push(`👥 ${[co, he].filter(Boolean).join(" · ")}`);
+      lines.push(`${E.people} ${[co, he].filter(Boolean).join(" · ")}`);
     }
-    if (s.roblox_game_link) lines.push(`🔗 [Join Server](${s.roblox_game_link})`);
+    if (s.roblox_game_link) lines.push(`${E.roblox} [Join Server](${s.roblox_game_link})`);
 
     const container = new ContainerBuilder().setAccentColor(st.color);
     if (SHIFT_IMAGE_URL) {

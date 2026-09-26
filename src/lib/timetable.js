@@ -1,3 +1,4 @@
+// [calendar]
 // Training timetable - the timetable channel shows a single self-updating
 // board message (see ./boards). This module keeps the /timetable command
 // and HTTP API surface: post (or refresh) the board, and the in-place

@@ -1,3 +1,4 @@
+// [schedule]
 const { SlashCommandBuilder, MessageFlags } = require("discord.js");
 const { postTimetable } = require("../lib/timetable");
 const { canManage } = require("../lib/guards");

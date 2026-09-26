@@ -1,3 +1,4 @@
+// [pin]
 // Trello sync - creates a training-session card on the FreshWay Trello
 // board so sessions booked via /training-booking appear there exactly like
 // sessions created on the website. Mirrors the website's

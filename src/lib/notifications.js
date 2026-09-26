@@ -1,3 +1,4 @@
+// [freshway]
 // Notification templates - ported from the FreshWay website
 // (src/lib/training/discord-notifications.ts, punishments.ts, reports.ts,
 // sessions.ts, whitelist.ts, quiz.ts). Every Discord message the FreshWay

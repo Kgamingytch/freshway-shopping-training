@@ -1,3 +1,4 @@
+// [engineering]
 const { Events, MessageFlags } = require("discord.js");
 const { updateTimetableMessage, TIMETABLE_REFRESH_ID } = require("../lib/timetable");
 const { updateTrainingsBoard, TRAININGS_REFRESH_ID } = require("../lib/boards");
@@ -51,6 +52,7 @@ const {
   handleSubscribeButton,
   handleUnsubscribeButton,
 } = require("../lib/public-board");
+const E = require("../lib/emojis");
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -152,7 +154,7 @@ module.exports = {
       console.error(`[CMD] Error in /${interaction.commandName}:`, err);
 
       const reply = {
-        content: "❌ Something went wrong running that command.",
+        content: `${E.cross} Something went wrong running that command.`,
         flags: MessageFlags.Ephemeral,
       };
 

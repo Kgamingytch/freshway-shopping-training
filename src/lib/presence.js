@@ -1,3 +1,4 @@
+// [boost]
 // Bot presence - sets a custom activity showing how many training sessions
 // are currently scheduled. Self-scheduled by the bot; also triggerable on
 // demand via the HTTP API (/api/presence/refresh).

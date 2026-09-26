@@ -1,3 +1,4 @@
+// [training]
 const { SlashCommandBuilder, MessageFlags } = require("discord.js");
 const { buildBookingRows } = require("../lib/booking");
 const { canManage } = require("../lib/guards");

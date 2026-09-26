@@ -1,3 +1,4 @@
+// [check]
 // Staff-case voting system (the /voting command, TM only).
 //
 // Flow:
@@ -18,6 +19,7 @@ const {
   ButtonStyle,
   MessageFlags,
 } = require("discord.js");
+const E = require("./emojis");
 const config = require("../config");
 const { buildEmbed, FW_GREEN } = require("./embeds");
 const { canLead } = require("./guards");
@@ -82,11 +84,13 @@ function buildVoteRow(caseId) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`${VOTE_YES_PREFIX}${caseId}`)
-      .setLabel("✅ Support")
+      .setLabel("Support")
+      .setEmoji(E.parse(E.check))
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
       .setCustomId(`${VOTE_NO_PREFIX}${caseId}`)
-      .setLabel("❌ Decline")
+      .setLabel("Decline")
+      .setEmoji(E.parse(E.cross))
       .setStyle(ButtonStyle.Danger),
   );
 }

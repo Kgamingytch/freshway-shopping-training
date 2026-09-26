@@ -1,3 +1,4 @@
+// [announcement]
 const { SlashCommandBuilder, MessageFlags } = require("discord.js");
 const { sendChannelEmbed } = require("../lib/channels");
 const { canManage } = require("../lib/guards");

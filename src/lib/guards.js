@@ -1,3 +1,4 @@
+// [security]
 // Command guards - role checks for slash commands based on configured role
 // IDs (FRESHWAY_ROLE_*) and the bot owner.
 

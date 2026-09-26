@@ -1,3 +1,4 @@
+// [boost]
 const { Events } = require("discord.js");
 const config = require("../config");
 const { startApi } = require("../lib/api");
