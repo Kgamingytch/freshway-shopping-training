@@ -1,10 +1,9 @@
 // [vacancies]
-// Public Training Board - Discord Components V2 "Shift Board" style.
+// Public Training Board - Discord Components V2 style.
 //
 // One self-updating V2 message in its own channel that everyone can see:
-//   - Header container (brand green): "FreshWay Shift Board" heading with the
-//     bot avatar, a "Next session" line, helper text and a "My Subscriptions"
-//     button.
+//   - Header container (brand green): "FreshWay Training Board" heading with a
+//     "Next session" line, helper text and a "My Subscriptions" button.
 //   - One container per session: status chip, timestamp (full + relative),
 //     Host / Co-Host / Helper mentions, optional game link and a per-session
 //     "Subscribe" button.
@@ -192,7 +191,7 @@ function buildV2Components(sessions, client) {
 
   // ----- Header container -----
   const header = new ContainerBuilder().setAccentColor(BRAND_GREEN);
-  header.addTextDisplayComponents((t) => t.setContent(`## ${HEADER_EMOJI} FreshWay Shift Board`));
+  header.addTextDisplayComponents((t) => t.setContent(`## ${HEADER_EMOJI} FreshWay Training Board`));
 
   if (sessions.length === 0) {
     header.addTextDisplayComponents(
@@ -242,9 +241,9 @@ function buildV2Components(sessions, client) {
       `${E.time} ${time}`,
       `${E.security} **Host:** ${s.hostMention ?? "Unassigned"}`,
     ];
-    if (s.coHostMentions.length || s.helperMentions.length) {
-      const co = s.coHostMentions.length ? `Co-Host: ${s.coHostMentions.join(", ")}` : null;
-      const he = s.helperMentions.length ? `Helper: ${s.helperMentions.join(", ")}` : null;
+    if (s.coHostMentions?.length || s.helperMentions?.length) {
+      const co = s.coHostMentions?.length ? `Co-Host: ${s.coHostMentions.join(", ")}` : null;
+      const he = s.helperMentions?.length ? `Helper: ${s.helperMentions.join(", ")}` : null;
       lines.push(`${E.people} ${[co, he].filter(Boolean).join(" · ")}`);
     }
     if (s.roblox_game_link) lines.push(`${E.roblox} [Join Server](${s.roblox_game_link})`);

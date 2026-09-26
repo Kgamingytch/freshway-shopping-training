@@ -55,13 +55,14 @@ async function fetchBoardSessions(limit = 10) {
 
   const { data } = await sb
     .from("training_sessions")
-    .select("id, title, scheduled_at, host_user_id, co_host_user_ids, helper_user_ids, roblox_game_link")
+    .select("id, title, session_type, status, scheduled_at, host_user_id, co_host_user_ids, helper_user_ids, roblox_game_link")
     .in("status", ["scheduled", "ongoing"])
     .order("scheduled_at", { ascending: true })
     .limit(limit);
   const sessions = data ?? [];
 
-  // Resolve host / co-host / helper names (Roblox preferred, fall back to Discord).
+  // Resolve host / co-host / helper identities as Discord mentions so the
+  // host DM flow (and pings) work; fall back to usernames when unlinked.
   const userIds = new Set();
   for (const s of sessions) {
     if (s.host_user_id) userIds.add(s.host_user_id);
@@ -73,20 +74,24 @@ async function fetchBoardSessions(limit = 10) {
   let robloxMap = new Map();
   if (ids.length > 0) {
     const [profiles, roblox] = await Promise.all([
-      sb.from("profiles").select("id, discord_username").in("id", ids),
+      sb.from("profiles").select("id, discord_username, discord_id").in("id", ids),
       sb.from("roblox_accounts").select("user_id, roblox_username").in("user_id", ids),
     ]);
-    profileMap = new Map((profiles.data ?? []).map((p) => [p.id, p.discord_username]));
+    profileMap = new Map((profiles.data ?? []).map((p) => [p.id, p]));
     robloxMap = new Map((roblox.data ?? []).map((r) => [r.user_id, r.roblox_username]));
   }
-  const nameFor = (userId) =>
-    userId ? (robloxMap.get(userId) ?? profileMap.get(userId) ?? "Unknown") : null;
+  const displayFor = (userId) => {
+    if (!userId) return null;
+    const profile = profileMap.get(userId);
+    if (profile?.discord_id) return `<@${profile.discord_id}>`;
+    return robloxMap.get(userId) ?? profile?.discord_username ?? "Unknown";
+  };
 
   return sessions.map((s) => ({
     ...s,
-    hostName: s.host_user_id ? (nameFor(s.host_user_id) ?? "Unknown") : "Unassigned",
-    coHostNames: (s.co_host_user_ids ?? []).map(nameFor).filter(Boolean),
-    helperNames: (s.helper_user_ids ?? []).map(nameFor).filter(Boolean),
+    hostName: s.host_user_id ? (displayFor(s.host_user_id) ?? "Unknown") : "Unassigned",
+    coHostNames: (s.co_host_user_ids ?? []).map(displayFor).filter(Boolean),
+    helperNames: (s.helper_user_ids ?? []).map(displayFor).filter(Boolean),
   }));
 }
 
@@ -111,11 +116,32 @@ function buildTimetableV2(sessions, client) {
     const time = s.scheduled_at
       ? `<t:${Math.floor(new Date(s.scheduled_at).getTime() / 1000)}:F> (<t:${Math.floor(new Date(s.scheduled_at).getTime() / 1000)}:R>)`
       : "Not scheduled";
-    const lines = [`**${s.title}**`, `${E.security} **Host:** ${s.hostName} · ${E.time} ${time}`];
+    const st = statusStyle(s.status);
+    const lines = [
+      `${st.emoji} **${s.title}**${s.session_type ? ` \`- ${s.session_type}\`` : ""}`,
+      `${E.time} ${time} · ${E.security} ${s.hostName}`,
+    ];
+    if (s.coHostNames.length || s.helperNames.length) {
+      lines.push(`${E.people} ${[s.coHostNames.length ? `Co: ${s.coHostNames.join(", ")}` : null, s.helperNames.length ? `Helpers: ${s.helperNames.join(", ")}` : null].filter(Boolean).join(" · ")}`);
+    }
     if (s.roblox_game_link) lines.push(`${E.roblox} [Join Server](${s.roblox_game_link})`);
     container.addTextDisplayComponents((t) => t.setContent(lines.join("\n")));
   }
   return container;
+}
+
+/** Emoji + accent colour per session status (shared with public board). */
+function statusStyle(status) {
+  switch (status) {
+    case "scheduled":
+      return { emoji: E.schedule };
+    case "ongoing":
+      return { emoji: E.connected };
+    case "cancelled":
+      return { emoji: E.cross };
+    default:
+      return { emoji: E.history };
+  }
 }
 
 /** Build the timetable embed (legacy shape, still used by /timetable post). */
@@ -187,16 +213,17 @@ function boardEmbed({ title, description }) {
 /** One session's embed: host, time, game, Co-Hosts, Helpers. */
 function buildSessionEmbed(session) {
   const time = session.scheduled_at
-    ? `<t:${Math.floor(new Date(session.scheduled_at).getTime() / 1000)}:F>`
+    ? `<t:${Math.floor(new Date(session.scheduled_at).getTime() / 1000)}:F> (<t:${Math.floor(new Date(session.scheduled_at).getTime() / 1000)}:R>)`
     : "Not scheduled";
+  const st = statusStyle(session.status);
   const lines = [
-    `> Host: ${session.hostName}`,
-    `> Time: ${time}`,
-    session.roblox_game_link ? `> Game: [Join Server](${session.roblox_game_link})` : "",
-    `> Co-Hosts: ${session.coHostNames.length ? session.coHostNames.join(", ") : "None"}`,
-    `> Helpers: ${session.helperNames.length ? session.helperNames.join(", ") : "None"}`,
+    `> ${E.time} ${time}`,
+    `> ${E.security} **Host:** ${session.hostName}`,
+    session.roblox_game_link ? `> ${E.roblox} [Join Server](${session.roblox_game_link})` : "",
+    `> ${E.people} Co-Hosts: ${session.coHostNames.length ? session.coHostNames.join(", ") : "None"}`,
+    `> ${E.member} Helpers: ${session.helperNames.length ? session.helperNames.join(", ") : "None"}`,
   ].filter(Boolean);
-  return boardEmbed({ title: session.title, description: lines.join("\n") });
+  return boardEmbed({ title: `${st.emoji} ${session.title}`, description: lines.join("\n") });
 }
 
 /** Refresh button on its own row (only the last session message has it). */
