@@ -412,8 +412,8 @@ async function handleHostPanelInteraction(interaction) {
     takeSessionId(HOST_STATUS_PREFIX) ??
     takeSessionId(HOST_TIME_PREFIX) ??
     takeSessionId(HOST_TYPE_PREFIX) ??
-    takeSessionId(HOST_CANCEL_PREFIX) ??
     takeSessionId(HOST_CANCEL_CONFIRM_PREFIX) ??
+    takeSessionId(HOST_CANCEL_PREFIX) ??
     (id.startsWith(HOST_TIME_MODAL) ? id.slice(HOST_TIME_MODAL.length) : null) ??
     (id.startsWith(HOST_TYPE_MODAL) ? id.slice(HOST_TYPE_MODAL.length) : null);
   if (!sessionId) return false;
@@ -423,7 +423,13 @@ async function handleHostPanelInteraction(interaction) {
   // Acknowledge IMMEDIATELY - Discord kills interactions that are not
   // acknowledged within 3 seconds. Modal submits that open another modal are
   // the exception (showModal acknowledges on its own).
-  if (!isModal) {
+  //
+  // NOTE: "Change Time"/"Change Type" buttons must NOT be deferred -
+  // interaction.showModal() throws "already acknowledged" on a deferred
+  // interaction, which made those buttons appear dead.
+  const opensModal =
+    !isModal && (id.startsWith(HOST_TIME_PREFIX) || id.startsWith(HOST_TYPE_PREFIX));
+  if (!isModal && !opensModal) {
     if (id.startsWith(HOST_STATUS_PREFIX) || id.startsWith(HOST_CANCEL_PREFIX)) {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
     } else if (!interaction.replied && !interaction.deferred) {

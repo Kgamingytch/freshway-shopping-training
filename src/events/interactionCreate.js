@@ -54,6 +54,7 @@ const {
 } = require("../lib/public-board");
 const E = require("../lib/emojis");
 const hostPanel = require("../lib/host-panel");
+const { handleConsolePowerButton } = require("../lib/console-panel");
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -84,6 +85,11 @@ module.exports = {
             })
             .catch(() => {});
         }
+      } else if (await handleConsolePowerButton(interaction).catch((e) => {
+        console.error("[ConsolePanel] power button failed:", e);
+        return false;
+      })) {
+        // handled by the console panel
       } else if (
         await hostPanel.handleHostPanelInteraction(interaction).catch((e) => {
           console.error("[HostPanel] interaction failed:", e);

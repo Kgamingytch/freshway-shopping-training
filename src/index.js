@@ -62,6 +62,10 @@ client.on("messageCreate", (message) => {
   handleProofDm(message).catch(() => {});
 });
 
+// --- Console panel (self-updating log channel + power buttons) ---
+const consolePanel = require("./lib/console-panel");
+consolePanel.startConsolePanel(client);
+
 // --- Global error handling ---
 process.on("unhandledRejection", (err) => {
   console.error("[ERROR] Unhandled rejection:", err);
