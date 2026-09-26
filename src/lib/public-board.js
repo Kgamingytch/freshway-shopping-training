@@ -64,8 +64,90 @@ const PB_UNSUB_PREFIX = "pb_unsub:"; // + sessionId
 const PB_MINE_ID = "pb_mine";
 const PB_UNSUB_ALL_ID = "pb_unsub_all";
 
-// Optional image used as the thumbnail on every session container.
+// Optional fallback image used as the thumbnail when the host has no
+// resolvable Roblox avatar.
 const SHIFT_IMAGE_URL = process.env.FRESHWAY_SHIFT_IMAGE_URL?.trim() || null;
+
+// ---------- Host Roblox avatar headshots (cached) ----------
+
+// host_user_id (profiles.id) -> headshot imageUrl (or null if unresolvable).
+const avatarCache = new Map();
+const AVATAR_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const robloxIdCache = new Map(); // roblox username -> roblox user id
+
+function cacheGet(map, key) {
+  const hit = map.get(key);
+  if (hit && Date.now() - hit.t < AVATAR_TTL_MS) return hit.v;
+  if (hit) map.delete(key);
+  return undefined;
+}
+
+function cacheSet(map, key, value) {
+  map.set(key, { v: value, t: Date.now() });
+}
+
+const ROBLOX_FETCH = {
+  headers: { "User-Agent": "FreshWayShoppingBot/1.0" },
+  signal: AbortSignal.timeout(8000),
+};
+
+/** Resolve a Roblox username to a Roblox user id (cached). */
+async function robloxUserIdForUsername(username) {
+  const cached = cacheGet(robloxIdCache, username);
+  if (cached !== undefined) return cached;
+  let id = null;
+  try {
+    const res = await fetch("https://users.roblox.com/v1/usernames/users", {
+      method: "POST",
+      headers: { ...ROBLOX_FETCH.headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ usernames: [username], excludeBannedUsers: false }),
+      signal: ROBLOX_FETCH.signal,
+    });
+    if (res.ok) {
+      const json = await res.json();
+      id = json?.data?.[0]?.id ?? null;
+    }
+  } catch (e) {
+    console.warn("[PublicBoard] Roblox username lookup failed:", e?.message ?? e);
+  }
+  cacheSet(robloxIdCache, username, id);
+  return id;
+}
+
+/** Get the Roblox headshot URL for a host (profile id), cached. */
+async function hostAvatarUrl(sb, hostUserId) {
+  if (!hostUserId) return null;
+  const cached = cacheGet(avatarCache, hostUserId);
+  if (cached !== undefined) return cached;
+
+  let url = null;
+  try {
+    // roblox_accounts.user_id -> roblox_username
+    const { data } = await sb
+      .from("roblox_accounts")
+      .select("roblox_username")
+      .eq("user_id", hostUserId)
+      .maybeSingle();
+    const username = data?.roblox_username;
+    if (username) {
+      const robloxId = await robloxUserIdForUsername(username);
+      if (robloxId) {
+        const res = await fetch(
+          `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${robloxId}&size=150x150&format=Png&isCircular=false`,
+          ROBLOX_FETCH,
+        );
+        if (res.ok) {
+          const json = await res.json();
+          url = json?.data?.[0]?.imageUrl ?? null;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("[PublicBoard] Host avatar lookup failed:", e?.message ?? e);
+  }
+  cacheSet(avatarCache, hostUserId, url);
+  return url;
+}
 
 // ---------- Persistent state (subscriptions + message ids) ----------
 
@@ -161,6 +243,14 @@ async function fetchPublicSessions(limit = 5) {
     robloxMap = new Map((roblox.data ?? []).map((r) => [r.user_id, r.roblox_username]));
   }
 
+  // Resolve host Roblox avatars (in parallel; cached).
+  const avatarMap = new Map();
+  await Promise.all(
+    sessions.map(async (s) => {
+      if (s.host_user_id) avatarMap.set(s.host_user_id, await hostAvatarUrl(sb, s.host_user_id));
+    }),
+  );
+
   const displayFor = (userId) => {
     if (!userId) return null;
     const profile = profileMap.get(userId);
@@ -170,6 +260,7 @@ async function fetchPublicSessions(limit = 5) {
 
   return sessions.map((s) => ({
     ...s,
+    hostAvatarUrl: s.host_user_id ? (avatarMap.get(s.host_user_id) ?? null) : null,
     hostMention: s.host_user_id ? displayFor(s.host_user_id) : null,
     coHostMentions: (s.co_host_user_ids ?? []).map(displayFor).filter(Boolean),
     helperMentions: (s.helper_user_ids ?? []).map(displayFor).filter(Boolean),
@@ -264,11 +355,12 @@ function buildV2Components(sessions, client) {
     if (s.roblox_game_link) lines.push(`${E.roblox} [Join Server](${s.roblox_game_link})`);
 
     const container = new ContainerBuilder().setAccentColor(st.color);
-    if (SHIFT_IMAGE_URL) {
+    const thumbUrl = s.hostAvatarUrl ?? SHIFT_IMAGE_URL;
+    if (thumbUrl) {
       const section = new SectionBuilder().addTextDisplayComponents((t) =>
         t.setContent(lines.join("\n")),
       );
-      section.setThumbnailAccessory(new ThumbnailBuilder().setURL(SHIFT_IMAGE_URL));
+      section.setThumbnailAccessory(new ThumbnailBuilder().setURL(thumbUrl));
       container.addSectionComponents(section);
     } else {
       container.addTextDisplayComponents((t) => t.setContent(lines.join("\n")));
