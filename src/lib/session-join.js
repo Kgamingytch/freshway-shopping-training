@@ -24,6 +24,7 @@ const { sendDiscordDm } = require("./dms");
 const { buildEmbed } = require("./embeds");
 
 const E = require("./emojis");
+const hostPanel = require("./host-panel");
 
 const JOIN_CO_HOST_PREFIX = "session_join_co_host:";
 const JOIN_HELPER_PREFIX = "session_join_helper:";
@@ -350,7 +351,11 @@ function buildManageReply(session, role) {
   return { embeds: [embed], components: [row] };
 }
 
-/** Manage button: open the ephemeral join/leave menu for the session. */
+/**
+ * Manage button: if the presser is the session HOST, DM them the private
+ * control panel (status/time/type/cancel). Otherwise show the normal
+ * in-channel join/leave menu.
+ */
 async function handleSessionManage(interaction) {
   const sessionId = interaction.customId.slice(MANAGE_PREFIX.length);
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -368,6 +373,34 @@ async function handleSessionManage(interaction) {
   const session = await findSession(sb, sessionId);
   if (!session) {
     return interaction.editReply({ content: "That session no longer exists." });
+  }
+
+  // Host? -> DM the control panel instead of the join menu.
+  const isHost = await hostPanel.isSessionHost(sb, sessionId, interaction.user.id);
+  if (isHost) {
+    const { data: full } = await sb
+      .from("training_sessions")
+      .select("id, title, session_type, scheduled_at, host_user_id")
+      .eq("id", sessionId)
+      .maybeSingle();
+    const result = await hostPanel.sendHostControlPanel(
+      interaction.client,
+      sessionId,
+      interaction.user.id,
+      full ?? session,
+    );
+    if (result.sent) {
+      await interaction.editReply({
+        content: `${E.check} Check your DMs - I sent you the control panel for **${session.title}**.`,
+        components: [],
+      });
+    } else {
+      await interaction.editReply({
+        content: `${E.cross} I couldn't DM you (${result.reason ?? "unknown error"}). Open your DMs and try again.`,
+        components: [],
+      });
+    }
+    return true;
   }
 
   const role = await currentSignupRole(sb, sessionId, profile.id);

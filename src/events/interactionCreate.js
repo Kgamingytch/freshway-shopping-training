@@ -53,6 +53,7 @@ const {
   handleUnsubscribeButton,
 } = require("../lib/public-board");
 const E = require("../lib/emojis");
+const hostPanel = require("../lib/host-panel");
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -84,7 +85,13 @@ module.exports = {
             .catch(() => {});
         }
       } else if (
-        id.startsWith(MANAGE_JOIN_CO_HOST_PREFIX) ||
+        await hostPanel.handleHostPanelInteraction(interaction).catch((e) => {
+          console.error("[HostPanel] interaction failed:", e);
+          return false;
+        })
+      ) {
+        // handled by the host DM control panel
+      } else if (id.startsWith(MANAGE_JOIN_CO_HOST_PREFIX) ||
         id.startsWith(MANAGE_JOIN_HELPER_PREFIX) ||
         id.startsWith(MANAGE_LEAVE_PREFIX)
       ) {

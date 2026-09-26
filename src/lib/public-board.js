@@ -536,16 +536,23 @@ async function notifySubscribers(client, { title, description, sessionId }) {
   if (recipients.length === 0) return 0;
 
   let sent = 0;
+  const failed = [];
   for (const discordId of recipients) {
     try {
       const ok = await sendDiscordDm(client, discordId, { title, description });
       if (ok) sent++;
-    } catch {
-      // Ignore DM failures (closed DMs, etc.)
+      else failed.push(discordId);
+    } catch (e) {
+      failed.push(discordId);
+      console.error(`[PublicBoard] DM to ${discordId} threw:`, e?.message ?? e);
     }
     await new Promise((r) => setTimeout(r, 350));
   }
-  console.log(`[PublicBoard] Notified ${sent}/${recipients.length} subscriber(s)`);
+  console.log(
+    `[PublicBoard] Notified ${sent}/${recipients.length} subscriber(s)` +
+      (failed.length ? ` - failed: ${failed.join(", ")}` : "") +
+      (sessionId ? ` (session ${sessionId})` : " (all)"),
+  );
   return sent;
 }
 
