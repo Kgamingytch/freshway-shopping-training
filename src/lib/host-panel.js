@@ -27,6 +27,7 @@ const { sendDiscordDm } = require("./dms");
 const { buildEmbed } = require("./embeds");
 const boards = require("./boards");
 const config = require("../config");
+const { sendLogEmbed } = require("./channels");
 const E = require("./emojis");
 
 const HOST_STATUS_PREFIX = "host_status:"; // + sessionId (select menu)
@@ -45,6 +46,23 @@ const STATUS_OPTIONS = [
 
 function unixTimestamp(iso) {
   return iso ? `<t:${Math.floor(new Date(iso).getTime() / 1000)}:F>` : "Not scheduled";
+}
+
+// ---------- Audit log ----------
+
+const HOST_CANCEL_CONFIRM_PREFIX = "host_cancel_confirm:"; // second-step id
+
+/** Audit entry for a host action (best-effort, goes to the logs channel). */
+async function auditHostAction(client, { hostTag, sessionTitle, action, detail }) {
+  await sendLogEmbed(
+    client,
+    `${E.moderation} Host Action: ${action}`,
+    [
+      `> ${E.security} **Host:** ${hostTag}`,
+      `> ${E.training} **Session:** ${sessionTitle}`,
+      `> ${E.pencil} **Action:** ${detail}`,
+    ].join("\n"),
+  );
 }
 
 // ---------- Host detection ----------
@@ -185,6 +203,12 @@ async function handleHostStatus(interaction, sessionId) {
     content: `${E.check} Status updated to **${newStatus}** for **${session.title}**.`,
     components: [],
   });
+  await auditHostAction(interaction.client, {
+    hostTag: `<@${interaction.user.id}>`,
+    sessionTitle: session.title,
+    action: "Status Change",
+    detail: `${session.status} → ${newStatus}`,
+  });
   // Board refresh + subscriber DMs happen AFTER the user gets a reply.
   await afterChange(interaction.client, sessionId, {
     notify: true,
@@ -240,6 +264,12 @@ async function handleHostTimeModal(interaction, sessionId) {
     content: `${E.check} **${session?.title ?? "Session"}** is now scheduled for <t:${Math.floor(when.getTime() / 1000)}:F>.`,
     flags: MessageFlags.Ephemeral,
   });
+  await auditHostAction(interaction.client, {
+    hostTag: `<@${interaction.user.id}>`,
+    sessionTitle: session?.title ?? "Session",
+    action: "Time Change",
+    detail: `New time: ${when.toISOString()}`,
+  });
   return true;
 }
 
@@ -283,10 +313,16 @@ async function handleHostTypeModal(interaction, sessionId) {
     content: `${E.check} **${session?.title ?? "Session"}** type updated to **${newType}**.`,
     flags: MessageFlags.Ephemeral,
   });
+  await auditHostAction(interaction.client, {
+    hostTag: `<@${interaction.user.id}>`,
+    sessionTitle: session?.title ?? "Session",
+    action: "Type Change",
+    detail: `New type: ${newType}`,
+  });
   return true;
 }
 
-/** "Cancel Session" button. */
+/** "Cancel Session" button: first press asks for confirmation. */
 async function handleHostCancel(interaction, sessionId) {
   const sb = getSupabase();
   if (!sb) return interaction.editReply({ content: `${E.cross} Database unavailable.`, components: [] });
@@ -300,6 +336,30 @@ async function handleHostCancel(interaction, sessionId) {
     return interaction.editReply({ content: `${E.cross} That session no longer exists.`, components: [] });
   }
 
+  // Step 1: ask for confirmation (destructive action).
+  const confirmId = HOST_CANCEL_CONFIRM_PREFIX + sessionId;
+  if (!interaction.customId.startsWith(HOST_CANCEL_CONFIRM_PREFIX)) {
+    await interaction.editReply({
+      content: `${E.warning} Are you sure you want to cancel **${session.title}**? This removes it from all boards and notifies subscribers.`,
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(confirmId)
+            .setLabel("Yes, cancel it")
+            .setEmoji(E.parse(E.warning))
+            .setStyle(ButtonStyle.Danger),
+          new ButtonBuilder()
+            .setCustomId("host_cancel_abort")
+            .setLabel("Keep session")
+            .setStyle(ButtonStyle.Secondary),
+        ),
+      ],
+    });
+    return true;
+  }
+
+  // Step 2: confirmed - delete.
+
   const { error } = await sb.from("training_sessions").delete().eq("id", sessionId);
   if (error) {
     console.error("[HostPanel] cancel failed:", error.message);
@@ -309,6 +369,12 @@ async function handleHostCancel(interaction, sessionId) {
   await interaction.editReply({
     content: `${E.check} **${session.title}** has been cancelled and removed from all boards.`,
     components: [],
+  });
+  await auditHostAction(interaction.client, {
+    hostTag: `<@${interaction.user.id}>`,
+    sessionTitle: session.title,
+    action: "Session Cancelled",
+    detail: "Session deleted permanently",
   });
 
   await Promise.all([
@@ -333,11 +399,21 @@ async function handleHostPanelInteraction(interaction) {
 
   const takeSessionId = (prefix) => (id.startsWith(prefix) ? id.slice(prefix.length) : null);
 
+  // "Keep session" abort button inside the cancel confirmation.
+  if (id === "host_cancel_abort") {
+    await interaction.editReply({
+      content: `${E.check} Cancelled the cancellation - your session is untouched.`,
+      components: [],
+    });
+    return true;
+  }
+
   const sessionId =
     takeSessionId(HOST_STATUS_PREFIX) ??
     takeSessionId(HOST_TIME_PREFIX) ??
     takeSessionId(HOST_TYPE_PREFIX) ??
     takeSessionId(HOST_CANCEL_PREFIX) ??
+    takeSessionId(HOST_CANCEL_CONFIRM_PREFIX) ??
     (id.startsWith(HOST_TIME_MODAL) ? id.slice(HOST_TIME_MODAL.length) : null) ??
     (id.startsWith(HOST_TYPE_MODAL) ? id.slice(HOST_TYPE_MODAL.length) : null);
   if (!sessionId) return false;

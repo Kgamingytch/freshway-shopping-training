@@ -34,6 +34,21 @@ const { getSupabase } = require("./supabase");
 const { sendDiscordDm } = require("./dms");
 const config = require("../config");
 const E = require("./emojis");
+const subStore = require("./sub-store");
+
+// ---------- Subscription accessors (Supabase-backed, file fallback) ----------
+
+async function readSubscriptions() {
+  return subStore.readAll(() => loadState().subscriptions);
+}
+
+async function writeSubscriptions(subs) {
+  return subStore.writeAll((snapshot) => {
+    const state = loadState();
+    state.subscriptions = snapshot;
+    saveState(state);
+  }, subs);
+}
 
 // Emojis come from the central custom-emoji registry (see ./emojis).
 const HEADER_EMOJI = E.training;
@@ -378,8 +393,8 @@ function unsubRow(sessionId) {
 /** Per-session Subscribe button. */
 async function handleSessionSubscribe(interaction, sessionId) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const state = loadState();
-  const already = state.subscriptions.some(
+  const subs = await readSubscriptions();
+  const already = subs.some(
     (s) => s.userId === interaction.user.id && s.sessionId === sessionId,
   );
   if (already) {
@@ -390,12 +405,12 @@ async function handleSessionSubscribe(interaction, sessionId) {
     return true;
   }
   const session = await fetchPublicSessions(25).then((all) => all.find((x) => x.id === sessionId));
-  state.subscriptions.push({
+  subs.push({
     userId: interaction.user.id,
     sessionId,
     title: session?.title ?? null,
   });
-  saveState(state);
+  await writeSubscriptions(subs);
   await interaction.editReply({
     content: `You're subscribed to **${session?.title ?? "this session"}**! You'll get a DM when it is added, changes status, or is cancelled.`,
     components: [unsubRow(sessionId)],
@@ -406,11 +421,10 @@ async function handleSessionSubscribe(interaction, sessionId) {
 /** Per-session Unsubscribe button. */
 async function handleSessionUnsubscribe(interaction, sessionId) {
   await interaction.deferUpdate();
-  const state = loadState();
-  state.subscriptions = state.subscriptions.filter(
-    (s) => !(s.userId === interaction.user.id && s.sessionId === sessionId),
+  const subs = await readSubscriptions();
+  await writeSubscriptions(
+    subs.filter((s) => !(s.userId === interaction.user.id && s.sessionId === sessionId)),
   );
-  saveState(state);
   await interaction.editReply({
     content: "Unsubscribed. You will no longer receive DM updates for this session.",
     components: [],
@@ -421,8 +435,8 @@ async function handleSessionUnsubscribe(interaction, sessionId) {
 /** "My Subscriptions": ephemeral list with Unsubscribe buttons. */
 async function handleMySubscriptions(interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const state = loadState();
-  const mine = state.subscriptions.filter((s) => s.userId === interaction.user.id);
+  const subs = await readSubscriptions();
+  const mine = subs.filter((s) => s.userId === interaction.user.id);
   if (mine.length === 0) {
     await interaction.editReply({
       content:
@@ -465,9 +479,8 @@ async function handleMySubscriptions(interaction) {
 /** Unsubscribe from everything. */
 async function handleUnsubscribeAll(interaction) {
   await interaction.deferUpdate();
-  const state = loadState();
-  state.subscriptions = state.subscriptions.filter((s) => s.userId !== interaction.user.id);
-  saveState(state);
+  const subs = await readSubscriptions();
+  await writeSubscriptions(subs.filter((s) => s.userId !== interaction.user.id));
   await interaction.editReply({
     content: "Unsubscribed from all session updates.",
     components: [],
@@ -480,8 +493,8 @@ async function handleUnsubscribeAll(interaction) {
 /** Legacy global subscribe button: opt in to every session. */
 async function handleSubscribeButton(interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const state = loadState();
-  if (state.subscriptions.some((s) => s.userId === interaction.user.id && s.sessionId === "*")) {
+  const subs = await readSubscriptions();
+  if (subs.some((s) => s.userId === interaction.user.id && s.sessionId === "*")) {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(UNSUBSCRIBE_PREFIX)
@@ -494,8 +507,8 @@ async function handleSubscribeButton(interaction) {
     });
     return true;
   }
-  state.subscriptions.push({ userId: interaction.user.id, sessionId: "*", title: null });
-  saveState(state);
+  subs.push({ userId: interaction.user.id, sessionId: "*", title: null });
+  await writeSubscriptions(subs);
   await interaction.editReply({
     content:
       "You're subscribed! You'll get a DM whenever a training session is added, changes status, or is cancelled.",
@@ -506,11 +519,10 @@ async function handleSubscribeButton(interaction) {
 /** Legacy global unsubscribe button. */
 async function handleUnsubscribeButton(interaction) {
   await interaction.deferUpdate();
-  const state = loadState();
-  state.subscriptions = state.subscriptions.filter(
-    (s) => !(s.userId === interaction.user.id && s.sessionId === "*"),
+  const subs = await readSubscriptions();
+  await writeSubscriptions(
+    subs.filter((s) => !(s.userId === interaction.user.id && s.sessionId === "*")),
   );
-  saveState(state);
   await interaction.editReply({
     content: "You are unsubscribed. You will no longer receive training update DMs.",
     components: [],
@@ -525,10 +537,10 @@ async function handleUnsubscribeButton(interaction) {
  * Rate limited; failures are ignored. Returns the number of DMs sent.
  */
 async function notifySubscribers(client, { title, description, sessionId }) {
-  const state = loadState();
+  const subscriptions = await readSubscriptions();
   const recipients = [
     ...new Set(
-      state.subscriptions
+      subscriptions
         .filter((s) => !sessionId || s.sessionId === sessionId || s.sessionId === "*")
         .map((s) => s.userId),
     ),
